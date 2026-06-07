@@ -1,0 +1,26 @@
+# Dependencies and build output
+node_modules/
+dist/
+coverage/
+
+# Local playtest inputs. Do not commit copyrighted ROMs or save states.
+roms/
+saves/
+states/
+*.nes
+*.unf
+*.unif
+*.fds
+*.state.json
+*.savestate.json
+
+# Local run artifacts
+runs/
+playtest-results/
+*.playtest.json
+
+# Environment and editor noise
+.env
+.env.*
+.DS_Store
+Thumbs.db

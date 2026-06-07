@@ -1,0 +1,1542 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PlaytestIQ Run Viewer</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        background: #0e1116;
+        color: #eef2f6;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        grid-template-columns: minmax(360px, 560px) minmax(520px, 1fr);
+        gap: 20px;
+        padding: 20px;
+        box-sizing: border-box;
+      }
+
+      h1,
+      h2,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        font-size: 24px;
+        line-height: 1.2;
+        margin-bottom: 6px;
+      }
+
+      h2 {
+        font-size: 14px;
+        color: #a9b4c4;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      p {
+        color: #aeb8c7;
+        line-height: 1.5;
+      }
+
+      button,
+      select {
+        border: 1px solid #303847;
+        border-radius: 6px;
+        background: #171d27;
+        color: #eef2f6;
+        font: inherit;
+        padding: 9px 11px;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      button.primary {
+        background: #66a3ff;
+        border-color: #66a3ff;
+        color: #07111f;
+        font-weight: 700;
+      }
+
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.45;
+      }
+
+      .panel {
+        background: #141922;
+        border: 1px solid #2b3340;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 14px;
+      }
+
+      .row {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+
+      .stack {
+        display: grid;
+        gap: 10px;
+      }
+
+      label {
+        display: grid;
+        gap: 5px;
+        color: #aeb8c7;
+      }
+
+      .overlay-stage,
+      #screen,
+      #ghostOverlay,
+      .grid-screen {
+        width: 100%;
+        aspect-ratio: 256 / 240;
+      }
+
+      .overlay-stage {
+        position: relative;
+        max-width: 960px;
+      }
+
+      #screen,
+      #ghostOverlay,
+      .grid-screen {
+        background: #030405;
+        border: 1px solid #2b3340;
+        image-rendering: pixelated;
+        display: block;
+      }
+
+      #screen,
+      #ghostOverlay {
+        position: absolute;
+        inset: 0;
+        height: 100%;
+      }
+
+      #ghostOverlay {
+        background: transparent;
+        pointer-events: none;
+      }
+
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .metric {
+        background: #10151d;
+        border: 1px solid #27303d;
+        border-radius: 6px;
+        padding: 10px;
+      }
+
+      .metric span {
+        display: block;
+        color: #8894a5;
+        font-size: 12px;
+      }
+
+      .metric strong {
+        display: block;
+        margin-top: 3px;
+        font-size: 18px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .pill-list,
+      .buttons {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+
+      .pill,
+      .controller-button {
+        border-radius: 999px;
+        background: #232b36;
+        color: #c9d3e0;
+        padding: 5px 8px;
+        font-size: 12px;
+      }
+
+      .controller-button.active {
+        background: #66a3ff;
+        color: #07111f;
+        font-weight: 700;
+      }
+
+      .finding {
+        border: 1px solid #303847;
+        border-radius: 8px;
+        padding: 12px;
+        background: #10151d;
+      }
+
+      .finding + .finding {
+        margin-top: 10px;
+      }
+
+      .finding-title {
+        display: flex;
+        gap: 8px;
+        justify-content: space-between;
+        align-items: flex-start;
+      }
+
+      .severity {
+        border-radius: 999px;
+        padding: 3px 7px;
+        font-size: 12px;
+        text-transform: uppercase;
+      }
+
+      .severity.high {
+        background: #ff6b6b;
+        color: #160404;
+      }
+
+      .severity.medium {
+        background: #ffd166;
+        color: #1b1200;
+      }
+
+      .severity.low,
+      .severity.info {
+        background: #78dba9;
+        color: #03140c;
+      }
+
+      .status-line {
+        color: #aeb8c7;
+      }
+
+      .status-line.good {
+        color: #78dba9;
+      }
+
+      .status-line.warn {
+        color: #ffd166;
+      }
+
+      .status-line.bad {
+        color: #ff8b8b;
+      }
+
+      .single-viewer {
+        display: grid;
+        gap: 14px;
+      }
+
+      .grid-viewer {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 12px;
+      }
+
+      .grid-tile {
+        display: grid;
+        gap: 8px;
+        min-width: 0;
+        background: #10151d;
+        border: 1px solid #27303d;
+        border-radius: 8px;
+        padding: 8px;
+      }
+
+      .grid-tile.selected {
+        border-color: #66a3ff;
+        box-shadow: 0 0 0 1px #66a3ff inset;
+      }
+
+      .grid-tile-header {
+        display: grid;
+        gap: 3px;
+      }
+
+      .grid-title {
+        color: #eef2f6;
+        font-size: 13px;
+        font-weight: 700;
+        line-height: 1.25;
+        overflow-wrap: anywhere;
+      }
+
+      .grid-meta {
+        color: #8894a5;
+        font-size: 12px;
+        line-height: 1.35;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .grid-placeholder {
+        display: grid;
+        place-items: center;
+        min-height: 180px;
+        border: 1px dashed #303847;
+        color: #8894a5;
+      }
+
+      .hidden {
+        display: none !important;
+      }
+
+      code {
+        background: #232b36;
+        border-radius: 4px;
+        padding: 2px 5px;
+      }
+
+      @media (max-width: 1100px) {
+        body {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="panel">
+        <h1>PlaytestIQ Run Viewer</h1>
+        <p id="runSummary">Loading run, ROM, and save state...</p>
+        <div class="stack">
+          <label>
+            View
+            <select id="viewModeSelect">
+              <option value="single">Single replay</option>
+              <option value="overlay" selected>Overlay trails</option>
+              <option value="grid">Grid replays</option>
+            </select>
+          </label>
+          <label>
+            Session
+            <select id="personaSelect"></select>
+          </label>
+          <label>
+            Sort
+            <select id="sortSelect">
+              <option value="original">Original</option>
+              <option value="score">Score</option>
+              <option value="fastest">Fastest</option>
+              <option value="game-score">Game Score</option>
+              <option value="rooms">Rooms</option>
+              <option value="progress">Progress</option>
+              <option value="coverage">Coverage</option>
+              <option value="findings">Findings</option>
+              <option value="novelty">Novelty</option>
+            </select>
+          </label>
+          <div class="row" id="gridControls">
+            <label>
+              Grid size
+              <select id="gridSizeSelect">
+                <option value="6" selected>6</option>
+                <option value="12">12</option>
+                <option value="18">18</option>
+                <option value="24">24</option>
+              </select>
+            </label>
+            <button id="prevBatchButton" disabled>Previous batch</button>
+            <button id="nextBatchButton" disabled>Next batch</button>
+          </div>
+          <div class="row" id="overlayControls">
+            <label>
+              Ghosts
+              <select id="overlayLimitSelect">
+                <option value="25">25</option>
+                <option value="50">50</option>
+                <option value="100" selected>100</option>
+                <option value="200">200</option>
+                <option value="all">All</option>
+              </select>
+            </label>
+            <label>
+              Trail
+              <select id="trailLengthSelect">
+                <option value="30">0.5s</option>
+                <option value="60">1s</option>
+                <option value="120" selected>2s</option>
+                <option value="240">4s</option>
+                <option value="600">10s</option>
+              </select>
+            </label>
+            <label>
+              Opacity
+              <select id="overlayOpacitySelect">
+                <option value="0.45">Soft</option>
+                <option value="0.65" selected>Medium</option>
+                <option value="0.85">Bold</option>
+              </select>
+            </label>
+          </div>
+          <div class="row">
+            <button id="playPauseButton" class="primary" disabled>Play</button>
+            <button id="resetButton" disabled>Reset</button>
+            <button id="checkpointButton" disabled>Jump to checkpoint</button>
+            <label>
+              Speed
+              <select id="speedSelect">
+                <option value="0.25">0.25x</option>
+                <option value="0.5">0.5x</option>
+                <option value="1" selected>1x</option>
+                <option value="2">2x</option>
+                <option value="4">4x</option>
+              </select>
+            </label>
+          </div>
+          <p id="statusLine" class="status-line">Preparing emulator.</p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Run Metrics</h2>
+        <div class="metrics">
+          <div class="metric"><span>Frame</span><strong id="frameMetric">0</strong></div>
+          <div class="metric"><span>Time</span><strong id="timeMetric">0.00s</strong></div>
+          <div class="metric"><span>Progress</span><strong id="progressMetric">0</strong></div>
+          <div class="metric"><span>Status</span><strong id="statusMetric">-</strong></div>
+          <div class="metric"><span>Deaths</span><strong id="deathsMetric">0</strong></div>
+          <div class="metric"><span>Findings</span><strong id="findingsMetric">0</strong></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Coverage</h2>
+        <div id="coverageList" class="pill-list"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Current Buttons</h2>
+        <div id="buttonList" class="buttons"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Replay View</h2>
+        <p id="gridSummary">Loading episode grid...</p>
+      </section>
+    </main>
+
+    <aside>
+      <section id="singleViewer" class="single-viewer">
+        <div class="overlay-stage">
+          <canvas id="screen" width="256" height="240"></canvas>
+          <canvas id="ghostOverlay" width="256" height="240"></canvas>
+        </div>
+      </section>
+
+      <section id="gridPanel" class="panel">
+        <h2>Synced Episodes</h2>
+        <div id="gridViewer" class="grid-viewer"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Findings</h2>
+        <div id="findingsList"></div>
+      </section>
+    </aside>
+
+    <script src="/vendor/jsnes.js"></script>
+    <script>
+      const BUTTONS = ["A", "B", "SELECT", "START", "UP", "DOWN", "LEFT", "RIGHT"];
+      const BUTTON_MAP = {
+        A: jsnes.Controller.BUTTON_A,
+        B: jsnes.Controller.BUTTON_B,
+        SELECT: jsnes.Controller.BUTTON_SELECT,
+        START: jsnes.Controller.BUTTON_START,
+        UP: jsnes.Controller.BUTTON_UP,
+        DOWN: jsnes.Controller.BUTTON_DOWN,
+        LEFT: jsnes.Controller.BUTTON_LEFT,
+        RIGHT: jsnes.Controller.BUTTON_RIGHT
+      };
+      const SMB_RAM = {
+        levelPage: 0x006d,
+        xOnScreen: 0x0086,
+        currentScreen: 0x071a,
+        world: 0x075f,
+        level: 0x0760
+      };
+
+      const canvas = document.getElementById("screen");
+      const singleRenderer = createCanvasRenderer(canvas);
+      const ghostOverlay = document.getElementById("ghostOverlay");
+      const ghostContext = ghostOverlay.getContext("2d");
+      const singleViewer = document.getElementById("singleViewer");
+      const gridPanel = document.getElementById("gridPanel");
+      const gridViewer = document.getElementById("gridViewer");
+      const gridControls = document.getElementById("gridControls");
+      const overlayControls = document.getElementById("overlayControls");
+      const personaSelect = document.getElementById("personaSelect");
+      const playPauseButton = document.getElementById("playPauseButton");
+      const resetButton = document.getElementById("resetButton");
+      const checkpointButton = document.getElementById("checkpointButton");
+      const speedSelect = document.getElementById("speedSelect");
+      const sortSelect = document.getElementById("sortSelect");
+      const viewModeSelect = document.getElementById("viewModeSelect");
+      const gridSizeSelect = document.getElementById("gridSizeSelect");
+      const overlayLimitSelect = document.getElementById("overlayLimitSelect");
+      const trailLengthSelect = document.getElementById("trailLengthSelect");
+      const overlayOpacitySelect = document.getElementById("overlayOpacitySelect");
+      const prevBatchButton = document.getElementById("prevBatchButton");
+      const nextBatchButton = document.getElementById("nextBatchButton");
+      const statusLine = document.getElementById("statusLine");
+      const buttonList = document.getElementById("buttonList");
+      const findingsList = document.getElementById("findingsList");
+      const coverageList = document.getElementById("coverageList");
+      const gridSummary = document.getElementById("gridSummary");
+
+      let run;
+      let romData;
+      let startState;
+      let nes;
+      let currentSession;
+      let currentEntry;
+      let sortedSessions = [];
+      let episodeRecords = [];
+      let currentFrame = 0;
+      let playing = false;
+      let activeButtons = new Set();
+      let replayInputs = [];
+      let gridPlayers = [];
+      let gridOffset = 0;
+      let playbackTimerId;
+      let lastTimestamp = 0;
+      let frameAccumulator = 0;
+
+      initialize().catch((error) => {
+        setStatus(error.message || String(error), "bad");
+      });
+
+      async function initialize() {
+        const [runResponse, stateResponse, romResponse, episodesResponse] = await Promise.all([
+          fetch("/api/run"),
+          fetch("/api/state"),
+          fetch("/api/rom"),
+          fetch("/api/episodes")
+        ]);
+
+        if (!runResponse.ok || !stateResponse.ok || !romResponse.ok) {
+          throw new Error("Viewer could not load one or more local run assets.");
+        }
+
+        run = await runResponse.json();
+        startState = await stateResponse.json();
+        romData = new Uint8Array(await romResponse.arrayBuffer());
+        episodeRecords = await loadEpisodeRecords(episodesResponse);
+        if (episodeRecords.length === 0) {
+          episodeRecords = (run.sessions || []).map((session, index) => ({
+            episode: session.agent?.episode ?? index + 1,
+            session,
+            overlaySamples: []
+          }));
+        }
+
+        const coverageGoal = run.discovery?.coverageGoal;
+        const coverageSummary = coverageGoal
+          ? ` · coverage ${coverageGoal.percent}% (${coverageGoal.covered}/${coverageGoal.required})${coverageGoal.complete ? "" : ` · missing ${coverageGoal.missing.slice(0, 4).join(", ")}`}`
+          : "";
+        const discovery = run.discovery
+          ? ` · ${run.discovery.strategy || "discovery"} · ${run.discovery.focus || "balanced"} · ${run.discovery.bugTarget || "all"} · ${run.discovery.episodes} episodes · ${run.discovery.uniqueCells} cells · best progress ${run.discovery.bestProgress || 0}/${run.discovery.targetProgress || "-"}${coverageSummary}`
+          : "";
+        document.getElementById("runSummary").textContent =
+          `${run.run.id} · ${run.run.objective} · ${run.run.durationSeconds}s · seed ${run.run.seed}${discovery}`;
+
+        const hasEpisodeSidecar = Boolean(run.discovery?.episodeLog) || episodeRecords.length > (run.sessions || []).length;
+        if (hasEpisodeSidecar) {
+          sortSelect.value =
+            run.discovery?.focus === "coverage"
+              ? "coverage"
+              : run.discovery?.strategy === "full-run-evolution"
+                ? "fastest"
+                : "progress";
+          viewModeSelect.value = "grid";
+        } else {
+          viewModeSelect.value = "single";
+        }
+        if (hasEpisodeSidecar) {
+          viewModeSelect.value = "overlay";
+        }
+
+        personaSelect.addEventListener("change", () => selectSession(Number(personaSelect.value), { reset: true }));
+        viewModeSelect.addEventListener("change", () => {
+          stopPlayback();
+          renderMode();
+          resetPlayback(0);
+          updateGridSummary();
+        });
+        sortSelect.addEventListener("change", () => {
+          gridOffset = 0;
+          renderSessionOptions(currentSession);
+          resetPlayback(0);
+        });
+        gridSizeSelect.addEventListener("change", () => {
+          gridOffset = 0;
+          resetPlayback(0);
+        });
+        overlayLimitSelect.addEventListener("change", () => {
+          drawGhostOverlay();
+          updateGridSummary();
+        });
+        trailLengthSelect.addEventListener("change", drawGhostOverlay);
+        overlayOpacitySelect.addEventListener("change", drawGhostOverlay);
+        prevBatchButton.addEventListener("click", () => {
+          gridOffset = Math.max(0, gridOffset - gridSize());
+          resetPlayback(0);
+        });
+        nextBatchButton.addEventListener("click", () => {
+          gridOffset = Math.min(maxGridOffset(), gridOffset + gridSize());
+          resetPlayback(0);
+        });
+        playPauseButton.addEventListener("click", togglePlayback);
+        resetButton.addEventListener("click", () => resetPlayback(0));
+        checkpointButton.addEventListener("click", () => resetPlayback(currentSession?.agent?.prefixFrames || 0));
+        speedSelect.addEventListener("change", () => {
+          frameAccumulator = 0;
+          lastTimestamp = performance.now();
+        });
+
+        renderButtons([]);
+        renderSessionOptions();
+        renderMode();
+        selectSession(Number(personaSelect.value || 0), { reset: true });
+        updateGridSummary();
+        setStatus("Ready.", "good");
+      }
+
+      async function loadEpisodeRecords(response) {
+        if (!response || response.status === 204) {
+          return [];
+        }
+        if (!response.ok) {
+          throw new Error("Viewer could not load the episode sidecar.");
+        }
+
+        const text = await response.text();
+        return text
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .map((line) => JSON.parse(line))
+          .filter((record) => record && record.session);
+      }
+
+      function renderSessionOptions(preferredSession) {
+        const sessions = episodeRecords.map((record, index) => ({ session: record.session, record, index }));
+        sortedSessions = sortSessions(sessions, sortSelect.value);
+        personaSelect.replaceChildren(
+          ...sortedSessions.map((entry, displayIndex) => {
+            const option = document.createElement("option");
+            option.value = `${displayIndex}`;
+            option.textContent = sessionLabel(entry.session, entry.index);
+            return option;
+          })
+        );
+
+        const preferredIndex = preferredSession
+          ? sortedSessions.findIndex((entry) => entry.session === preferredSession)
+          : 0;
+        personaSelect.value = `${Math.max(0, preferredIndex)}`;
+        updateBatchButtons();
+      }
+
+      function sortSessions(sessions, mode) {
+        const copy = [...sessions];
+        if (mode === "score") {
+          return copy.sort((a, b) => (b.session.agent?.score || 0) - (a.session.agent?.score || 0));
+        }
+        if (mode === "progress") {
+          return copy.sort((a, b) => (b.session.metrics?.maxProgress || 0) - (a.session.metrics?.maxProgress || 0));
+        }
+        if (mode === "fastest") {
+          return copy.sort((a, b) => {
+            const aBest = fastestMilestoneFrame(a.session);
+            const bBest = fastestMilestoneFrame(b.session);
+            return (
+              (b.session.metrics?.maxProgress || 0) - (a.session.metrics?.maxProgress || 0) ||
+              aBest - bBest ||
+              (b.session.agent?.speedScore || 0) - (a.session.agent?.speedScore || 0)
+            );
+          });
+        }
+        if (mode === "game-score") {
+          return copy.sort((a, b) => (b.session.agent?.gameScoreDelta || 0) - (a.session.agent?.gameScoreDelta || 0));
+        }
+        if (mode === "rooms") {
+          return copy.sort((a, b) => (b.session.agent?.roomTransitions || 0) - (a.session.agent?.roomTransitions || 0));
+        }
+        if (mode === "coverage") {
+          return copy.sort((a, b) => {
+            const bGoals = new Set(b.session.agent?.coverageGoalsHit || []).size;
+            const aGoals = new Set(a.session.agent?.coverageGoalsHit || []).size;
+            return (
+              bGoals - aGoals ||
+              (b.session.agent?.coverageScore || 0) - (a.session.agent?.coverageScore || 0) ||
+              (b.session.metrics?.maxProgress || 0) - (a.session.metrics?.maxProgress || 0)
+            );
+          });
+        }
+        if (mode === "findings") {
+          return copy.sort((a, b) => (b.session.findings?.length || 0) - (a.session.findings?.length || 0));
+        }
+        if (mode === "novelty") {
+          return copy.sort((a, b) => (b.session.agent?.newCells || 0) - (a.session.agent?.newCells || 0));
+        }
+        return copy;
+      }
+
+      function sessionLabel(session, index) {
+        if (session.agent) {
+          const progress = session.agent.progressDelta ? ` · progress +${session.agent.progressDelta}` : "";
+          const bugScore = session.agent.bugScore !== undefined ? ` · bug ${session.agent.bugScore}` : "";
+          const coverageScore = session.agent.coverageScore !== undefined ? ` · cov ${session.agent.coverageScore}` : "";
+          const gameScore = session.agent.gameScoreDelta !== undefined ? ` · game +${session.agent.gameScoreDelta}` : "";
+          return `#${session.agent.episode} ${session.persona} · score ${session.agent.score}${bugScore}${coverageScore}${gameScore} · bugs ${session.findings?.length || 0} · new ${session.agent.newCells}${progress}`;
+        }
+
+        return `${index + 1}. ${session.persona} (${session.status})`;
+      }
+
+      function selectSession(displayIndex, options = { reset: false }) {
+        currentEntry = sortedSessions[displayIndex];
+        currentSession = currentEntry?.session;
+        if (!currentSession) {
+          setStatus("No session found in this run.", "bad");
+          return;
+        }
+
+        personaSelect.value = `${displayIndex}`;
+        replayInputs = Array.isArray(currentSession.replayInputs) ? currentSession.replayInputs : [];
+        renderSessionSummary();
+        updateGridSelection();
+        updateGridSummary();
+        if (options.reset) {
+          resetPlayback(0);
+        } else {
+          renderButtons(buttonsForFrame(replayInputs, currentFrame));
+          updateTelemetry();
+        }
+      }
+
+      function renderMode() {
+        const gridMode = isGridMode();
+        const overlayMode = isOverlayMode();
+        singleViewer.classList.toggle("hidden", gridMode);
+        gridPanel.classList.toggle("hidden", !gridMode);
+        gridControls.classList.toggle("hidden", !gridMode);
+        overlayControls.classList.toggle("hidden", !overlayMode);
+        ghostOverlay.classList.toggle("hidden", !overlayMode);
+        if (!overlayMode) {
+          clearGhostOverlay();
+        }
+        checkpointButton.textContent = gridMode ? "Jump grid to checkpoint" : "Jump to checkpoint";
+      }
+
+      function createNes(onFrame) {
+        const emulator = new jsnes.NES({
+          emulateSound: false,
+          onFrame
+        });
+        emulator.loadROM(romData);
+        emulator.fromJSON(JSON.parse(JSON.stringify(startState)));
+        return emulator;
+      }
+
+      function resetPlayback(frame) {
+        if (isGridMode()) {
+          resetGridPlayback(frame);
+        } else {
+          resetSinglePlayback(frame);
+        }
+      }
+
+      function resetSinglePlayback(frame) {
+        stopPlayback();
+        nes = createNes(singleRenderer.renderFrame);
+        currentFrame = 0;
+        activeButtons = new Set();
+        renderButtons([]);
+
+        const targetFrame = Math.max(0, Math.min(frame, currentSession?.metrics?.frames || maxReplayFrame(replayInputs)));
+        for (let index = 0; index < targetFrame; index += 1) {
+          stepSingleFrame(false);
+        }
+
+        renderButtons(buttonsForFrame(replayInputs, currentFrame));
+        updateTelemetry();
+        drawGhostOverlay();
+        const canReplay = replayInputs.length > 0;
+        playPauseButton.disabled = !canReplay;
+        resetButton.disabled = false;
+        checkpointButton.disabled = !canReplay || !(currentSession?.agent?.prefixFrames > 0);
+        setStatus(canReplay ? "Ready to replay full persona run." : "This run has no full replayInputs. Re-run agents to enable full playback.", canReplay ? "good" : "warn");
+      }
+
+      function resetGridPlayback(frame) {
+        stopPlayback();
+        nes = undefined;
+        activeButtons = new Set();
+        currentFrame = 0;
+        renderGridTiles();
+
+        const maxFrame = maxVisibleGridFrame();
+        const targetFrame = Math.max(0, Math.min(frame, maxFrame));
+        for (let index = 0; index < targetFrame; index += 1) {
+          stepGridFrame(false);
+        }
+
+        renderButtons(buttonsForFrame(replayInputs, currentFrame));
+        updateTelemetry();
+        updateGridTileStates();
+        updateBatchButtons();
+        const canReplay = gridPlayers.some((player) => player.replayInputs.length > 0);
+        playPauseButton.disabled = !canReplay;
+        resetButton.disabled = false;
+        checkpointButton.disabled = !canReplay || !(currentSession?.agent?.prefixFrames > 0);
+        setStatus(canReplay ? "Ready to replay synced grid." : "No visible grid episodes have full replayInputs.", canReplay ? "good" : "warn");
+      }
+
+      function renderGridTiles() {
+        gridPlayers = [];
+        gridViewer.replaceChildren();
+
+        const visibleEntries = sortedSessions.slice(gridOffset, gridOffset + gridSize());
+        if (!visibleEntries.length) {
+          const placeholder = document.createElement("div");
+          placeholder.className = "grid-placeholder";
+          placeholder.textContent = "No episodes available.";
+          gridViewer.appendChild(placeholder);
+          return;
+        }
+
+        for (const [visibleIndex, entry] of visibleEntries.entries()) {
+          const displayIndex = gridOffset + visibleIndex;
+          const tile = document.createElement("section");
+          tile.className = "grid-tile";
+          tile.tabIndex = 0;
+
+          const header = document.createElement("div");
+          header.className = "grid-tile-header";
+
+          const title = document.createElement("div");
+          title.className = "grid-title";
+          title.textContent = shortGridLabel(entry.session, entry.index);
+
+          const meta = document.createElement("div");
+          meta.className = "grid-meta";
+          meta.textContent = gridMeta(entry.session);
+
+          const state = document.createElement("div");
+          state.className = "grid-meta";
+          state.textContent = "frame 0 · progress 0";
+
+          header.append(title, meta, state);
+
+          const tileCanvas = document.createElement("canvas");
+          tileCanvas.className = "grid-screen";
+          tileCanvas.width = 256;
+          tileCanvas.height = 240;
+          tile.append(header, tileCanvas);
+          gridViewer.appendChild(tile);
+
+          tile.addEventListener("click", () => selectSession(displayIndex, { reset: false }));
+          tile.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              selectSession(displayIndex, { reset: false });
+            }
+          });
+
+          const renderer = createCanvasRenderer(tileCanvas, 2);
+          const playerReplayInputs = Array.isArray(entry.session.replayInputs) ? entry.session.replayInputs : [];
+          const player = {
+            activeButtons: new Set(),
+            displayIndex,
+            entry,
+            frame: 0,
+            meta,
+            nes: playerReplayInputs.length ? createNes(renderer.renderFrame) : undefined,
+            replayInputs: playerReplayInputs,
+            renderer,
+            session: entry.session,
+            state,
+            tile,
+            totalFrames: entry.session.metrics?.frames || maxReplayFrame(playerReplayInputs)
+          };
+          if (!playerReplayInputs.length) {
+            state.textContent = "full replay unavailable";
+          }
+          gridPlayers.push(player);
+        }
+        updateGridSelection();
+      }
+
+      function togglePlayback() {
+        if (playing) {
+          stopPlayback();
+          return;
+        }
+
+        playing = true;
+        playPauseButton.textContent = "Pause";
+        lastTimestamp = performance.now();
+        frameAccumulator = 0;
+        schedulePlaybackLoop(0);
+      }
+
+      function stopPlayback() {
+        playing = false;
+        playPauseButton.textContent = "Play";
+        if (playbackTimerId) {
+          clearTimeout(playbackTimerId);
+          playbackTimerId = undefined;
+        }
+      }
+
+      function schedulePlaybackLoop(delay) {
+        if (!playing) {
+          return;
+        }
+        playbackTimerId = window.setTimeout(() => playbackLoop(performance.now()), delay);
+      }
+
+      function playbackLoop(timestamp) {
+        if (!playing) {
+          return;
+        }
+
+        const speed = Number(speedSelect.value);
+        const elapsed = timestamp - lastTimestamp;
+        lastTimestamp = timestamp;
+        frameAccumulator += (elapsed / 1000) * 60 * speed;
+
+        while (frameAccumulator >= 1) {
+          const advanced = isGridMode() ? stepGridFrame(true) : stepSingleFrame(true);
+          if (!advanced) {
+            stopPlayback();
+            setStatus("Replay complete.", "good");
+            return;
+          }
+          frameAccumulator -= 1;
+        }
+
+        updateTelemetry();
+        schedulePlaybackLoop(16);
+      }
+
+      function stepSingleFrame(render) {
+        if (!nes || currentFrame >= (currentSession?.metrics?.frames || maxReplayFrame(replayInputs))) {
+          return false;
+        }
+
+        currentFrame += 1;
+        const buttons = buttonsForFrame(replayInputs, currentFrame);
+        activeButtons = applyButtonsTo(nes, activeButtons, buttons);
+        nes.frame();
+        if (render) {
+          renderButtons(buttons);
+          drawGhostOverlay();
+        }
+        return true;
+      }
+
+      function stepGridFrame(render) {
+        const maxFrame = maxVisibleGridFrame();
+        if (!gridPlayers.length || currentFrame >= maxFrame) {
+          return false;
+        }
+
+        currentFrame += 1;
+        for (const player of gridPlayers) {
+          if (!player.nes || currentFrame > player.totalFrames) {
+            continue;
+          }
+          const buttons = buttonsForFrame(player.replayInputs, currentFrame);
+          player.activeButtons = applyButtonsTo(player.nes, player.activeButtons, buttons);
+          player.nes.frame();
+          player.frame = currentFrame;
+        }
+        if (render) {
+          renderButtons(buttonsForFrame(replayInputs, currentFrame));
+          updateGridTileStates();
+        }
+        return true;
+      }
+
+      function applyButtonsTo(emulator, currentButtons, buttons) {
+        const nextButtons = new Set(buttons);
+        for (const button of currentButtons) {
+          if (!nextButtons.has(button)) {
+            emulator.buttonUp(1, BUTTON_MAP[button]);
+          }
+        }
+        for (const button of nextButtons) {
+          if (!currentButtons.has(button)) {
+            emulator.buttonDown(1, BUTTON_MAP[button]);
+          }
+        }
+        return nextButtons;
+      }
+
+      function buttonsForFrame(ranges, frame) {
+        const range = ranges.find((candidate) => candidate.frameStart <= frame && candidate.frameEnd >= frame);
+        return range ? range.buttons.filter((button) => BUTTONS.includes(button)) : [];
+      }
+
+      function createCanvasRenderer(targetCanvas, renderEvery = 1) {
+        const context = targetCanvas.getContext("2d");
+        const imageData = context.createImageData(256, 240);
+        let frameCounter = 0;
+        context.fillStyle = "#030405";
+        context.fillRect(0, 0, 256, 240);
+
+        return {
+          context,
+          imageData,
+          renderFrame(buffer) {
+            frameCounter += 1;
+            if (renderEvery > 1 && frameCounter % renderEvery !== 0) {
+              return;
+            }
+            for (let i = 0; i < buffer.length; i += 1) {
+              const pixel = buffer[i];
+              const offset = i * 4;
+              imageData.data[offset] = (pixel >> 16) & 0xff;
+              imageData.data[offset + 1] = (pixel >> 8) & 0xff;
+              imageData.data[offset + 2] = pixel & 0xff;
+              imageData.data[offset + 3] = 0xff;
+            }
+            context.putImageData(imageData, 0, 0);
+          }
+        };
+      }
+
+      function renderSessionSummary() {
+        const metrics = currentSession.metrics || {};
+        document.getElementById("statusMetric").textContent = currentSession.status || "-";
+        document.getElementById("deathsMetric").textContent = metrics.deaths ?? 0;
+        document.getElementById("findingsMetric").textContent = currentSession.findings?.length ?? 0;
+
+        coverageList.replaceChildren(...(currentSession.coverage || []).map((item) => pill(item)));
+        if (!coverageList.children.length) {
+          coverageList.appendChild(pill("none"));
+        }
+
+        if (currentSession.agent) {
+          coverageList.appendChild(pill(`score ${currentSession.agent.score}`));
+          if (currentSession.agent.progressScore !== undefined) {
+            coverageList.appendChild(pill(`progress score ${currentSession.agent.progressScore}`));
+          }
+          if (currentSession.agent.bugScore !== undefined) {
+            coverageList.appendChild(pill(`bug score ${currentSession.agent.bugScore}`));
+          }
+          if (currentSession.agent.coverageScore !== undefined) {
+            coverageList.appendChild(pill(`coverage score ${currentSession.agent.coverageScore}`));
+          }
+          if (currentSession.agent.routeScore !== undefined) {
+            coverageList.appendChild(pill(`route score ${currentSession.agent.routeScore}`));
+          }
+          if (currentSession.agent.speedScore !== undefined) {
+            coverageList.appendChild(pill(`speed score ${currentSession.agent.speedScore}`));
+          }
+          if (currentSession.agent.roomScore !== undefined) {
+            coverageList.appendChild(pill(`room score ${currentSession.agent.roomScore}`));
+          }
+          if (currentSession.agent.gameScoreDelta !== undefined) {
+            coverageList.appendChild(pill(`game +${currentSession.agent.gameScoreDelta}`));
+          }
+          if (currentSession.agent.roomTransitions !== undefined) {
+            coverageList.appendChild(pill(`rooms ${currentSession.agent.roomTransitions}`));
+          }
+          for (const goal of (currentSession.agent.coverageGoalsHit || []).slice(0, 10)) {
+            coverageList.appendChild(pill(goal));
+          }
+          coverageList.appendChild(pill(`new cells ${currentSession.agent.newCells}`));
+          if (currentSession.agent.focus) {
+            coverageList.appendChild(pill(`focus ${currentSession.agent.focus}`));
+          }
+          if (currentSession.agent.bugTarget) {
+            coverageList.appendChild(pill(`target ${currentSession.agent.bugTarget}`));
+          }
+          if (currentSession.agent.type) {
+            coverageList.appendChild(pill(currentSession.agent.type));
+          }
+          if (currentSession.agent.prefixFrames !== undefined) {
+            coverageList.appendChild(pill(`prefix ${currentSession.agent.prefixFrames}f`));
+          }
+          if (currentSession.agent.suffixFrames !== undefined) {
+            coverageList.appendChild(pill(`suffix ${currentSession.agent.suffixFrames}f`));
+          }
+          if (currentSession.agent.progressDelta !== undefined) {
+            coverageList.appendChild(pill(`progress +${currentSession.agent.progressDelta}`));
+          }
+          if (currentSession.agent.targetReached !== undefined) {
+            coverageList.appendChild(pill(currentSession.agent.targetReached ? "target reached" : "target pending"));
+          }
+          if (currentSession.agent.obstacleFrame !== undefined) {
+            coverageList.appendChild(
+              pill(`obstacle ${currentSession.agent.obstacleProgress ?? "-"} @ ${currentSession.agent.obstacleFrame}f`)
+            );
+          }
+          if (currentSession.agent.startCell) {
+            coverageList.appendChild(pill(`start ${currentSession.agent.startCell.slice(0, 28)}`));
+          }
+          coverageList.appendChild(pill(currentSession.agent.mutation));
+        }
+
+        findingsList.replaceChildren();
+        for (const finding of currentSession.findings || []) {
+          findingsList.appendChild(renderFinding(finding));
+        }
+        if (!findingsList.children.length) {
+          const p = document.createElement("p");
+          p.textContent = "No findings for this persona.";
+          findingsList.appendChild(p);
+        }
+      }
+
+      function renderFinding(finding) {
+        const section = document.createElement("section");
+        section.className = "finding";
+
+        const title = document.createElement("div");
+        title.className = "finding-title";
+
+        const strong = document.createElement("strong");
+        strong.textContent = finding.type;
+        title.appendChild(strong);
+
+        const severity = document.createElement("span");
+        severity.className = `severity ${finding.severity}`;
+        severity.textContent = finding.severity;
+        title.appendChild(severity);
+
+        const summary = document.createElement("p");
+        summary.textContent = finding.summary;
+
+        const details = document.createElement("p");
+        details.innerHTML = `Frames <code>${finding.frameStart}</code> to <code>${finding.frameEnd}</code>`;
+
+        const repro = document.createElement("p");
+        repro.textContent = formatReproInputs(finding.reproInputs || []);
+
+        const button = document.createElement("button");
+        button.textContent = "Jump to finding";
+        button.disabled = replayInputs.length === 0;
+        button.addEventListener("click", () => resetPlayback(Math.max(0, finding.frameStart - 1)));
+
+        section.append(title, summary, details, repro, button);
+        return section;
+      }
+
+      function formatReproInputs(ranges) {
+        if (!ranges.length) {
+          return "No repro input window stored for this finding.";
+        }
+        return ranges
+          .slice(0, 4)
+          .map((range) => {
+            const buttons = range.buttons.length ? range.buttons.join("+") : "none";
+            return `${range.frameStart}-${range.frameEnd}: ${buttons}`;
+          })
+          .join(" · ");
+      }
+
+      function renderButtons(buttons) {
+        buttonList.replaceChildren(
+          ...BUTTONS.map((button) => {
+            const span = document.createElement("span");
+            span.className = buttons.includes(button) ? "controller-button active" : "controller-button";
+            span.textContent = button;
+            return span;
+          })
+        );
+      }
+
+      function updateTelemetry() {
+        const snapshot = isGridMode() ? readSnapshot(selectedGridPlayer()?.nes) : readSnapshot(nes);
+        document.getElementById("frameMetric").textContent = `${currentFrame}`;
+        document.getElementById("timeMetric").textContent = `${(currentFrame / 60).toFixed(2)}s`;
+        document.getElementById("progressMetric").textContent = `${snapshot.progress}`;
+      }
+
+      function updateGridTileStates() {
+        for (const player of gridPlayers) {
+          const snapshot = readSnapshot(player.nes);
+          const done = player.replayInputs.length > 0 && currentFrame >= player.totalFrames;
+          player.state.textContent = done
+            ? `complete · ${player.totalFrames}f · progress ${snapshot.progress}`
+            : `frame ${Math.min(currentFrame, player.totalFrames)} · progress ${snapshot.progress}`;
+        }
+        updateGridSelection();
+      }
+
+      function updateGridSelection() {
+        for (const player of gridPlayers) {
+          player.tile.classList.toggle("selected", player.session === currentSession);
+        }
+      }
+
+      function drawGhostOverlay() {
+        clearGhostOverlay();
+        if (!isOverlayMode() || !episodeRecords.length) {
+          return;
+        }
+
+        const base = readSnapshot(nes);
+        const baseFrame = Math.max(1, currentFrame);
+        const cameraOrigin = base.progress - (base.xOnScreen || 0);
+        const entries = overlayEntries();
+        let ghostsDrawn = 0;
+
+        ghostContext.save();
+        ghostContext.lineCap = "round";
+        ghostContext.lineJoin = "round";
+        for (const [overlayIndex, entry] of entries.entries()) {
+          const samples = Array.isArray(entry.record?.overlaySamples) ? entry.record.overlaySamples : [];
+          if (!samples.length) {
+            continue;
+          }
+
+          const color = colorForEpisode(entry.record?.episode ?? entry.index ?? overlayIndex);
+          const opacity = Number(overlayOpacitySelect.value) || 0.65;
+          const jitter = ghostJitter(entry.record?.episode ?? entry.index ?? overlayIndex);
+          const trailSamples = samplesForTrail(samples, baseFrame, trailLengthFrames())
+            .map((sample) => sampleToScreen(sample, base, cameraOrigin, jitter))
+            .filter(Boolean);
+
+          if (trailSamples.length > 1) {
+            ghostContext.strokeStyle = hexToRgba(color, opacity * 0.42);
+            ghostContext.lineWidth = 1.2;
+            ghostContext.beginPath();
+            let drawing = false;
+            let previous;
+            for (const point of trailSamples) {
+              if (
+                !previous ||
+                Math.abs(point.trailX - previous.trailX) > 70 ||
+                Math.abs(point.trailY - previous.trailY) > 90
+              ) {
+                ghostContext.moveTo(point.trailX, point.trailY);
+                drawing = false;
+              } else {
+                ghostContext.lineTo(point.trailX, point.trailY);
+                drawing = true;
+              }
+              previous = point;
+            }
+            if (drawing) {
+              ghostContext.stroke();
+            }
+          }
+
+          const markerSample = sampleAtOrBefore(samples, baseFrame);
+          const marker = markerSample ? sampleToScreen(markerSample, base, cameraOrigin, jitter) : undefined;
+          if (marker) {
+            const inFinding = isFrameInFinding(entry.session, markerSample.frame);
+            drawGhostMario(marker.x, marker.y, color, {
+              dying: Boolean(markerSample.dying),
+              finding: inFinding,
+              opacity
+            });
+            ghostsDrawn += 1;
+          }
+        }
+        ghostContext.restore();
+        ghostOverlay.dataset.ghosts = `${ghostsDrawn}`;
+      }
+
+      function clearGhostOverlay() {
+        ghostContext.clearRect(0, 0, ghostOverlay.width, ghostOverlay.height);
+        ghostOverlay.dataset.ghosts = "0";
+      }
+
+      function overlayEntries() {
+        const limitValue = overlayLimitSelect.value;
+        const limit = limitValue === "all" ? Number.MAX_SAFE_INTEGER : Number(limitValue) || 100;
+        return sortedSessions
+          .filter((entry) => Array.isArray(entry.record?.overlaySamples) && entry.record.overlaySamples.length > 0)
+          .slice(0, limit);
+      }
+
+      function samplesForTrail(samples, frame, trailLength) {
+        const startFrame = Math.max(1, frame - trailLength + 1);
+        return samples.filter((sample) => sample.frame >= startFrame && sample.frame <= frame);
+      }
+
+      function sampleAtOrBefore(samples, frame) {
+        let low = 0;
+        let high = samples.length - 1;
+        let best = -1;
+        while (low <= high) {
+          const middle = Math.floor((low + high) / 2);
+          if ((samples[middle].frame || 0) <= frame) {
+            best = middle;
+            low = middle + 1;
+          } else {
+            high = middle - 1;
+          }
+        }
+        return best >= 0 ? samples[best] : samples[0];
+      }
+
+      function sampleToScreen(sample, base, cameraOrigin, jitter) {
+        if (!sameArea(sample, base)) {
+          return undefined;
+        }
+        const sampleProgress = Number.isFinite(sample.progress)
+          ? sample.progress
+          : Number.isFinite(sample.currentScreen) && Number.isFinite(sample.x)
+            ? sample.currentScreen * 256 + sample.x
+            : undefined;
+        if (!Number.isFinite(sampleProgress)) {
+          return undefined;
+        }
+        const x = sampleProgress - cameraOrigin + jitter.x;
+        const y = (Number.isFinite(sample.y) ? sample.y : 0) + jitter.y;
+        if (x < -18 || x > 274 || y < -24 || y > 260) {
+          return undefined;
+        }
+        return {
+          x,
+          y,
+          trailX: x + 8,
+          trailY: y + 12
+        };
+      }
+
+      function sameArea(sample, base) {
+        const hasRawArea = Number.isFinite(sample.rawWorld) && Number.isFinite(sample.rawLevel);
+        if (hasRawArea) {
+          return sample.rawWorld === base.rawWorld && sample.rawLevel === base.rawLevel;
+        }
+        return sample.world === base.world && sample.level === base.level;
+      }
+
+      function drawGhostMario(x, y, color, options) {
+        const px = Math.round(x);
+        const py = Math.round(y);
+        const bodyColor = options.dying ? "#ff5a63" : color;
+        const overalls = options.dying ? "#4f151d" : "#3676ff";
+
+        ghostContext.save();
+        ghostContext.globalAlpha = options.opacity;
+        ghostContext.fillStyle = hexToRgba("#000000", 0.35);
+        ghostContext.fillRect(px + 2, py + 17, 12, 2);
+
+        ghostContext.fillStyle = bodyColor;
+        ghostContext.fillRect(px + 3, py, 9, 3);
+        ghostContext.fillRect(px + 5, py - 3, 6, 3);
+        ghostContext.fillStyle = "#ffd19a";
+        ghostContext.fillRect(px + 4, py + 3, 8, 6);
+        ghostContext.fillStyle = bodyColor;
+        ghostContext.fillRect(px + 2, py + 9, 12, 4);
+        ghostContext.fillStyle = overalls;
+        ghostContext.fillRect(px + 3, py + 12, 10, 7);
+        ghostContext.fillStyle = bodyColor;
+        ghostContext.fillRect(px + 2, py + 19, 5, 4);
+        ghostContext.fillRect(px + 9, py + 19, 5, 4);
+
+        if (options.finding) {
+          ghostContext.strokeStyle = "#ffffff";
+          ghostContext.lineWidth = 1;
+          ghostContext.strokeRect(px, py - 4, 16, 28);
+        }
+        if (options.dying) {
+          ghostContext.strokeStyle = "#ffef8a";
+          ghostContext.lineWidth = 1.5;
+          ghostContext.beginPath();
+          ghostContext.moveTo(px, py - 3);
+          ghostContext.lineTo(px + 16, py + 23);
+          ghostContext.moveTo(px + 16, py - 3);
+          ghostContext.lineTo(px, py + 23);
+          ghostContext.stroke();
+        }
+        ghostContext.restore();
+      }
+
+      function colorForEpisode(seed) {
+        const hue = Math.abs(Number(seed) * 47) % 360;
+        return hslToHex(hue, 86, 62);
+      }
+
+      function ghostJitter(seed) {
+        const value = Math.abs(Number(seed) || 0);
+        const angle = (value * 137.508 * Math.PI) / 180;
+        const radius = 0.6 + (value % 5) * 0.38;
+        return {
+          x: Math.cos(angle) * radius,
+          y: Math.sin(angle) * radius
+        };
+      }
+
+      function trailLengthFrames() {
+        return Number(trailLengthSelect.value) || 120;
+      }
+
+      function isFrameInFinding(session, frame) {
+        return (session.findings || []).some((finding) => finding.frameStart <= frame && finding.frameEnd >= frame);
+      }
+
+      function hslToHex(hue, saturation, lightness) {
+        const s = saturation / 100;
+        const l = lightness / 100;
+        const c = (1 - Math.abs(2 * l - 1)) * s;
+        const hp = hue / 60;
+        const x = c * (1 - Math.abs((hp % 2) - 1));
+        let [r, g, b] = [0, 0, 0];
+        if (hp >= 0 && hp < 1) [r, g, b] = [c, x, 0];
+        else if (hp < 2) [r, g, b] = [x, c, 0];
+        else if (hp < 3) [r, g, b] = [0, c, x];
+        else if (hp < 4) [r, g, b] = [0, x, c];
+        else if (hp < 5) [r, g, b] = [x, 0, c];
+        else [r, g, b] = [c, 0, x];
+        const m = l - c / 2;
+        return `#${[r, g, b]
+          .map((channel) => Math.round((channel + m) * 255).toString(16).padStart(2, "0"))
+          .join("")}`;
+      }
+
+      function hexToRgba(hex, alpha) {
+        const value = hex.replace("#", "");
+        const red = parseInt(value.slice(0, 2), 16);
+        const green = parseInt(value.slice(2, 4), 16);
+        const blue = parseInt(value.slice(4, 6), 16);
+        return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+      }
+
+      function updateGridSummary() {
+        const source = run.discovery?.episodeLog?.episodes
+          ? `${run.discovery.episodeLog.episodes} saved sidecar episodes`
+          : "saved top sessions only";
+        const start = sortedSessions.length ? gridOffset + 1 : 0;
+        const end = Math.min(sortedSessions.length, gridOffset + gridSize());
+        if (isGridMode()) {
+          gridSummary.textContent = `Grid replay mode: showing ${start}-${end} of ${sortedSessions.length} episodes from ${source}. Each tile is its own synced emulator replay.`;
+          return;
+        }
+        if (isOverlayMode()) {
+          const ghostCount = overlayEntries().length;
+          gridSummary.textContent = `Overlay trail mode: drawing up to ${ghostCount} synced ghost Marios from ${source} over the selected base replay.`;
+          return;
+        }
+        gridSummary.textContent = `Single replay mode. ${sortedSessions.length} episodes are available for selection.`;
+      }
+
+      function updateBatchButtons() {
+        const gridMode = isGridMode();
+        prevBatchButton.disabled = !gridMode || gridOffset <= 0;
+        nextBatchButton.disabled = !gridMode || gridOffset >= maxGridOffset();
+        updateGridSummary();
+      }
+
+      function selectedGridPlayer() {
+        return gridPlayers.find((player) => player.session === currentSession) || gridPlayers[0];
+      }
+
+      function shortGridLabel(session, index) {
+        if (session.agent) {
+          return `#${session.agent.episode ?? index + 1} · score ${session.agent.score ?? 0}`;
+        }
+        return `${index + 1}. ${session.persona || "session"}`;
+      }
+
+      function gridMeta(session) {
+        const progress = session.metrics?.maxProgress ?? 0;
+        const findings = session.findings?.length ?? 0;
+        const bugScore = session.agent?.bugScore ?? 0;
+        const coverageScore = session.agent?.coverageScore ?? 0;
+        const routeScore = session.agent?.routeScore ?? 0;
+        const goals = new Set(session.agent?.coverageGoalsHit || []).size;
+        const gameScore = session.agent?.gameScoreDelta ?? 0;
+        const rooms = session.agent?.roomTransitions ?? 0;
+        const parent = session.agent?.parentId ? ` · parent ${session.agent.parentId}` : "";
+        return `progress ${progress} · ${Math.round((session.metrics?.frames || 0) / 60)}s · route ${Math.round(routeScore)} · game +${gameScore} · rooms ${rooms} · bugs ${findings} · coverage ${coverageScore}/${goals}${parent}`;
+      }
+
+      function fastestMilestoneFrame(session) {
+        const frames = Object.values(session.agent?.milestoneFrames || {}).filter((frame) => Number.isFinite(frame));
+        return frames.length ? Math.min(...frames) : Number.MAX_SAFE_INTEGER;
+      }
+
+      function readSnapshot(emulator) {
+        const memory = emulator && emulator.cpu && emulator.cpu.mem;
+        if (!memory) {
+          return { rawWorld: 0, rawLevel: 0, world: 0, level: 0, currentScreen: 0, xOnScreen: 0, progress: 0 };
+        }
+        const currentScreen = readByte(memory, SMB_RAM.currentScreen);
+        const levelPage = readByte(memory, SMB_RAM.levelPage);
+        const xOnScreen = readByte(memory, SMB_RAM.xOnScreen);
+        const rawWorld = readByte(memory, SMB_RAM.world);
+        const rawLevel = readByte(memory, SMB_RAM.level);
+        return {
+          rawWorld,
+          rawLevel,
+          world: rawWorld + 1,
+          level: rawLevel + 1,
+          currentScreen,
+          levelPage,
+          xOnScreen,
+          progress: levelPage * 256 + xOnScreen
+        };
+      }
+
+      function readByte(memory, address) {
+        return memory[address & 0x07ff] || 0;
+      }
+
+      function maxReplayFrame(inputs) {
+        return inputs.reduce((maxFrame, range) => Math.max(maxFrame, range.frameEnd || 0), 0);
+      }
+
+      function maxVisibleGridFrame() {
+        return gridPlayers.reduce((maxFrame, player) => Math.max(maxFrame, player.totalFrames), 0);
+      }
+
+      function gridSize() {
+        return Number(gridSizeSelect.value) || 12;
+      }
+
+      function maxGridOffset() {
+        if (sortedSessions.length === 0) {
+          return 0;
+        }
+        return Math.floor((sortedSessions.length - 1) / gridSize()) * gridSize();
+      }
+
+      function isGridMode() {
+        return viewModeSelect.value === "grid";
+      }
+
+      function isOverlayMode() {
+        return viewModeSelect.value === "overlay";
+      }
+
+      function pill(text) {
+        const span = document.createElement("span");
+        span.className = "pill";
+        span.textContent = text;
+        return span;
+      }
+
+      function setStatus(message, tone) {
+        statusLine.textContent = message;
+        statusLine.className = `status-line ${tone || ""}`;
+      }
+    </script>
+  </body>
+</html>
