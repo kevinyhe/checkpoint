@@ -75,6 +75,11 @@ describe("run viewer server", () => {
     expect(html).toContain("overlayLegend");
     expect(html).toContain("AI Moment");
     expect(html).toContain("aiObservationGrid");
+    expect(html).toContain("Run Status");
+    expect(html).toContain("bugStateText");
+    expect(html).toContain("Agent runtime");
+    expect(html).toContain("No bugs found");
+    expect(html).toContain("renderRunStatus");
     expect(html).toContain("renderAiMoment");
     expect(html).toContain("Enemy spotted");
     expect(html).toContain("Score increased");

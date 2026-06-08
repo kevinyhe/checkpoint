@@ -239,6 +239,56 @@
         gap: 10px;
       }
 
+      .run-status-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .run-status-card {
+        background: #10151d;
+        border: 1px solid #27303d;
+        border-radius: 6px;
+        padding: 10px;
+        min-width: 0;
+      }
+
+      .run-status-card.good {
+        border-color: rgba(120, 219, 169, 0.55);
+      }
+
+      .run-status-card.warning {
+        border-color: rgba(255, 209, 102, 0.6);
+      }
+
+      .run-status-card.bad {
+        border-color: rgba(255, 139, 139, 0.65);
+      }
+
+      .run-status-card span {
+        display: block;
+        color: #8894a5;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      .run-status-card strong {
+        display: block;
+        margin-top: 4px;
+        color: #eef2f6;
+        font-size: 15px;
+        line-height: 1.25;
+        overflow-wrap: anywhere;
+      }
+
+      .run-status-card small {
+        display: block;
+        margin-top: 4px;
+        color: #8894a5;
+        line-height: 1.3;
+      }
+
       .metric {
         background: #10151d;
         border: 1px solid #27303d;
@@ -605,6 +655,42 @@
           </div>
           <div class="metric">
             <span>Findings</span><strong id="findingsMetric">0</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Run Status</h2>
+        <div class="run-status-grid">
+          <div id="bugStateCard" class="run-status-card">
+            <span>Bug state</span>
+            <strong id="bugStateText">-</strong>
+            <small id="bugStateMeta">Waiting for session.</small>
+          </div>
+          <div id="runtimeCard" class="run-status-card">
+            <span>Agent runtime</span>
+            <strong id="runtimeText">-</strong>
+            <small id="runtimeMeta">Frames and seconds.</small>
+          </div>
+          <div id="coverageStateCard" class="run-status-card">
+            <span>Coverage</span>
+            <strong id="coverageStateText">-</strong>
+            <small id="coverageStateMeta">Signals and goals.</small>
+          </div>
+          <div id="scoreStateCard" class="run-status-card">
+            <span>Score</span>
+            <strong id="scoreStateText">-</strong>
+            <small id="scoreStateMeta">Agent quality score.</small>
+          </div>
+          <div id="phaseStateCard" class="run-status-card">
+            <span>Agent phase</span>
+            <strong id="phaseStateText">-</strong>
+            <small id="phaseStateMeta">Controller mode.</small>
+          </div>
+          <div id="targetStateCard" class="run-status-card">
+            <span>Target</span>
+            <strong id="targetStateText">-</strong>
+            <small id="targetStateMeta">Progress objective.</small>
           </div>
         </div>
       </section>
@@ -1676,6 +1762,13 @@
             popupKey: `finding-${finding.type}-${finding.frameStart}`,
           });
         }
+        if (!(currentSession?.findings || []).length) {
+          events.push({
+            label: "No bugs found",
+            body: "No bug findings were recorded for this selected run.",
+            tone: "good",
+          });
+        }
 
         const milestones = Object.entries(
           currentSession?.agent?.milestoneFrames || {},
@@ -1992,6 +2085,7 @@
           metrics.deaths ?? 0;
         document.getElementById("findingsMetric").textContent =
           currentSession.findings?.length ?? 0;
+        renderRunStatus();
 
         coverageList.replaceChildren(
           ...(currentSession.coverage || []).map((item) => pill(item)),
@@ -2136,6 +2230,125 @@
           p.textContent = "No findings for this persona.";
           findingsList.appendChild(p);
         }
+      }
+
+      function renderRunStatus() {
+        const session = currentSession || {};
+        const metrics = session.metrics || {};
+        const findings = session.findings || [];
+        const highFinding = findings.some(
+          (finding) =>
+            finding.severity === "high" ||
+            finding.type === "emulator-error" ||
+            finding.type === "impossible-transition" ||
+            finding.type === "wrong-warp-candidate",
+        );
+        const mediumFinding = findings.some(
+          (finding) => finding.severity === "medium",
+        );
+        setRunStatusCard(
+          "bugState",
+          findings.length === 0
+            ? "No bugs found"
+            : `${findings.length} bug ${findings.length === 1 ? "finding" : "findings"}`,
+          findings.length === 0
+            ? "No detector findings were recorded for this selected run."
+            : `${highestFindingSeverity(findings)} severity · ${findings
+                .slice(0, 2)
+                .map((finding) => finding.type)
+                .join(", ")}`,
+          findings.length === 0 ? "good" : highFinding ? "bad" : mediumFinding ? "warning" : "",
+        );
+
+        const runtimeSeconds = Number.isFinite(metrics.gameSeconds)
+          ? Number(metrics.gameSeconds)
+          : Number(metrics.frames || 0) / 60;
+        setRunStatusCard(
+          "runtime",
+          `${runtimeSeconds.toFixed(2)}s`,
+          `${metrics.frames ?? 0} frames · ${metrics.deaths ?? 0} deaths · ${metrics.transitions ?? 0} transitions`,
+          metrics.deaths > 0 ? "warning" : "good",
+        );
+
+        const coverageGoal = run.discovery?.coverageGoal;
+        const coverageCount = session.coverage?.length ?? 0;
+        const goalsHit = new Set(session.agent?.coverageGoalsHit || []).size;
+        setRunStatusCard(
+          "coverageState",
+          coverageGoal
+            ? `${coverageGoal.percent}%`
+            : `${coverageCount} ${coverageCount === 1 ? "signal" : "signals"}`,
+          coverageGoal
+            ? `${coverageGoal.covered}/${coverageGoal.required} required · ${
+                coverageGoal.complete
+                  ? "complete"
+                  : `${coverageGoal.missing.slice(0, 3).join(", ") || "missing goals"} pending`
+              }`
+            : `${goalsHit} goals hit · ${session.coverage?.slice(0, 3).join(", ") || "no coverage tags"}`,
+          coverageGoal ? (coverageGoal.complete ? "good" : "warning") : coverageCount > 0 ? "good" : "warning",
+        );
+
+        const adjustedScore = displayScore(currentEntry || session);
+        const rawScore = Number(session.agent?.score ?? 0);
+        const scoreText =
+          rawScore && Math.round(adjustedScore) !== Math.round(rawScore)
+            ? `${Math.round(adjustedScore)} quality`
+            : `${Math.round(adjustedScore)}`;
+        setRunStatusCard(
+          "scoreState",
+          scoreText,
+          `raw ${rawScore || 0} · progress ${displayProgress(currentEntry || session)} · game +${session.agent?.gameScoreDelta ?? 0}`,
+          findings.length > 0 ? "warning" : "good",
+        );
+
+        const phase =
+          session.agent?.phase ||
+          session.agent?.focus ||
+          session.agent?.type ||
+          session.persona ||
+          "replay";
+        setRunStatusCard(
+          "phaseState",
+          phase,
+          `${session.agent?.bugTarget ? `target ${session.agent.bugTarget}` : "no bug target"} · ${session.agent?.mutation || "no mutation label"}`,
+          "",
+        );
+
+        const targetReached = Boolean(session.agent?.targetReached);
+        const targetProgress = run.discovery?.targetProgress;
+        setRunStatusCard(
+          "targetState",
+          targetReached ? "Target reached" : "Target pending",
+          targetProgress
+            ? `best ${displayProgress(currentEntry || session)} / target ${targetProgress}`
+            : `best progress ${displayProgress(currentEntry || session)}`,
+          targetReached ? "good" : "warning",
+        );
+      }
+
+      function setRunStatusCard(idPrefix, value, meta, tone) {
+        const card = document.getElementById(`${idPrefix}Card`);
+        const text = document.getElementById(`${idPrefix}Text`);
+        const metaNode = document.getElementById(`${idPrefix}Meta`);
+        if (!card || !text || !metaNode) {
+          return;
+        }
+        card.className = `run-status-card ${tone || ""}`.trim();
+        text.textContent = value;
+        metaNode.textContent = meta;
+      }
+
+      function highestFindingSeverity(findings) {
+        if (findings.some((finding) => finding.severity === "high")) {
+          return "high";
+        }
+        if (findings.some((finding) => finding.severity === "medium")) {
+          return "medium";
+        }
+        if (findings.some((finding) => finding.severity === "low")) {
+          return "low";
+        }
+        return findings.length ? "info" : "none";
       }
 
       function renderFinding(finding) {
