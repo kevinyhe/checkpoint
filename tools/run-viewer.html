@@ -3,12 +3,17 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>PlaytestIQ Run Viewer</title>
+    <title>checkpoint Run Viewer</title>
     <style>
       :root {
         color-scheme: dark;
         font-family:
-          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
           sans-serif;
         background: #0e1116;
         color: #eef2f6;
@@ -134,6 +139,100 @@
         pointer-events: none;
       }
 
+      .event-popup-layer {
+        position: absolute;
+        inset: 0;
+        z-index: 4;
+        pointer-events: none;
+        overflow: hidden;
+      }
+
+      .event-popup {
+        position: absolute;
+        right: 8px;
+        max-width: min(210px, calc(100% - 18px));
+        min-width: 118px;
+        border: 1px solid rgba(255, 255, 255, 0.28);
+        border-left: 4px solid #66a3ff;
+        border-radius: 6px;
+        background: rgba(8, 12, 18, 0.86);
+        box-shadow: 0 8px 22px rgba(0, 0, 0, 0.38);
+        color: #eef2f6;
+        padding: 7px 9px;
+        backdrop-filter: blur(4px);
+        animation: popup-in 150ms ease-out;
+      }
+
+      .event-popup.good {
+        border-left-color: #78dba9;
+      }
+
+      .event-popup.warning {
+        border-left-color: #ffd166;
+      }
+
+      .event-popup.bad {
+        border-left-color: #ff8b8b;
+      }
+
+      .event-popup strong {
+        display: block;
+        font-size: 12px;
+        line-height: 1.25;
+      }
+
+      .event-popup span {
+        display: block;
+        margin-top: 2px;
+        color: #c9d3e0;
+        font-size: 11px;
+        line-height: 1.25;
+      }
+
+      @keyframes popup-in {
+        from {
+          opacity: 0;
+          transform: translateX(10px) scale(0.98);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0) scale(1);
+        }
+      }
+
+      .overlay-legend {
+        display: grid;
+        gap: 8px;
+      }
+
+      .overlay-legend-item {
+        display: grid;
+        grid-template-columns: 14px 1fr;
+        gap: 8px;
+        align-items: start;
+        color: #aeb8c7;
+        font-size: 12px;
+        line-height: 1.35;
+      }
+
+      .overlay-legend-swatch {
+        width: 12px;
+        height: 12px;
+        border-radius: 3px;
+        border: 1px solid rgba(255, 255, 255, 0.45);
+        margin-top: 2px;
+      }
+
+      .overlay-legend-title {
+        color: #eef2f6;
+        font-weight: 700;
+      }
+
+      .overlay-legend-meta {
+        color: #8894a5;
+        font-variant-numeric: tabular-nums;
+      }
+
       .metrics {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -180,6 +279,79 @@
         background: #66a3ff;
         color: #07111f;
         font-weight: 700;
+      }
+
+      .ai-context {
+        display: grid;
+        gap: 12px;
+      }
+
+      .ai-intent {
+        background: #10151d;
+        border: 1px solid #27303d;
+        border-radius: 6px;
+        padding: 10px;
+        color: #eef2f6;
+        font-size: 13px;
+        line-height: 1.4;
+      }
+
+      .ai-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .ai-cell {
+        background: #10151d;
+        border: 1px solid #27303d;
+        border-radius: 6px;
+        padding: 8px;
+      }
+
+      .ai-cell span,
+      .ai-event span {
+        display: block;
+        color: #8894a5;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      .ai-cell strong {
+        display: block;
+        margin-top: 3px;
+        color: #eef2f6;
+        font-size: 13px;
+        font-variant-numeric: tabular-nums;
+        overflow-wrap: anywhere;
+      }
+
+      .ai-events {
+        display: grid;
+        gap: 7px;
+      }
+
+      .ai-event {
+        border-left: 3px solid #66a3ff;
+        background: #10151d;
+        border-radius: 5px;
+        padding: 7px 9px;
+        color: #c9d3e0;
+        font-size: 12px;
+        line-height: 1.35;
+      }
+
+      .ai-event.warning {
+        border-left-color: #ffd166;
+      }
+
+      .ai-event.bad {
+        border-left-color: #ff8b8b;
+      }
+
+      .ai-event.good {
+        border-left-color: #78dba9;
       }
 
       .finding {
@@ -313,7 +485,7 @@
   <body>
     <main>
       <section class="panel">
-        <h1>PlaytestIQ Run Viewer</h1>
+        <h1>checkpoint Run Viewer</h1>
         <p id="runSummary">Loading run, ROM, and save state...</p>
         <div class="stack">
           <label>
@@ -384,6 +556,15 @@
                 <option value="0.85">Bold</option>
               </select>
             </label>
+            <label>
+              Labels
+              <select id="overlayLabelSelect">
+                <option value="off">Off</option>
+                <option value="selected">Selected only</option>
+                <option value="first25" selected>First 25</option>
+                <option value="all">All visible</option>
+              </select>
+            </label>
           </div>
           <div class="row">
             <button id="playPauseButton" class="primary" disabled>Play</button>
@@ -407,12 +588,24 @@
       <section class="panel">
         <h2>Run Metrics</h2>
         <div class="metrics">
-          <div class="metric"><span>Frame</span><strong id="frameMetric">0</strong></div>
-          <div class="metric"><span>Time</span><strong id="timeMetric">0.00s</strong></div>
-          <div class="metric"><span>Progress</span><strong id="progressMetric">0</strong></div>
-          <div class="metric"><span>Status</span><strong id="statusMetric">-</strong></div>
-          <div class="metric"><span>Deaths</span><strong id="deathsMetric">0</strong></div>
-          <div class="metric"><span>Findings</span><strong id="findingsMetric">0</strong></div>
+          <div class="metric">
+            <span>Frame</span><strong id="frameMetric">0</strong>
+          </div>
+          <div class="metric">
+            <span>Time</span><strong id="timeMetric">0.00s</strong>
+          </div>
+          <div class="metric">
+            <span>Progress</span><strong id="progressMetric">0</strong>
+          </div>
+          <div class="metric">
+            <span>Status</span><strong id="statusMetric">-</strong>
+          </div>
+          <div class="metric">
+            <span>Deaths</span><strong id="deathsMetric">0</strong>
+          </div>
+          <div class="metric">
+            <span>Findings</span><strong id="findingsMetric">0</strong>
+          </div>
         </div>
       </section>
 
@@ -437,7 +630,24 @@
         <div class="overlay-stage">
           <canvas id="screen" width="256" height="240"></canvas>
           <canvas id="ghostOverlay" width="256" height="240"></canvas>
+          <div id="eventPopupLayer" class="event-popup-layer"></div>
         </div>
+      </section>
+
+      <section class="panel">
+        <h2>AI Moment</h2>
+        <div class="ai-context">
+          <div id="aiIntentLine" class="ai-intent">
+            Waiting for replay state.
+          </div>
+          <div id="aiObservationGrid" class="ai-grid"></div>
+          <div id="aiEventList" class="ai-events"></div>
+        </div>
+      </section>
+
+      <section id="overlayLegendPanel" class="panel">
+        <h2>Overlay Legend</h2>
+        <div id="overlayLegend" class="overlay-legend"></div>
       </section>
 
       <section id="gridPanel" class="panel">
@@ -453,7 +663,16 @@
 
     <script src="/vendor/jsnes.js"></script>
     <script>
-      const BUTTONS = ["A", "B", "SELECT", "START", "UP", "DOWN", "LEFT", "RIGHT"];
+      const BUTTONS = [
+        "A",
+        "B",
+        "SELECT",
+        "START",
+        "UP",
+        "DOWN",
+        "LEFT",
+        "RIGHT",
+      ];
       const BUTTON_MAP = {
         A: jsnes.Controller.BUTTON_A,
         B: jsnes.Controller.BUTTON_B,
@@ -462,21 +681,78 @@
         UP: jsnes.Controller.BUTTON_UP,
         DOWN: jsnes.Controller.BUTTON_DOWN,
         LEFT: jsnes.Controller.BUTTON_LEFT,
-        RIGHT: jsnes.Controller.BUTTON_RIGHT
+        RIGHT: jsnes.Controller.BUTTON_RIGHT,
       };
       const SMB_RAM = {
+        playerState: 0x000e,
+        enemyTypes: 0x0016,
+        playerFloatState: 0x001d,
+        horizontalSpeed: 0x0057,
         levelPage: 0x006d,
         xOnScreen: 0x0086,
+        verticalVelocity: 0x009f,
+        yOnScreen: 0x00ce,
+        areaMusic: 0x00fb,
+        eventMusic: 0x00fc,
+        soundEffect2: 0x00fe,
+        soundEffect3: 0x00ff,
+        tileBase: 0x0500,
+        tileEnd: 0x069f,
+        warpZoneControl: 0x06d6,
+        changeAreaTimer: 0x06de,
+        horizontalSpeedAbs: 0x0700,
+        deathMusicLoaded: 0x0712,
         currentScreen: 0x071a,
+        nextScreen: 0x071b,
+        screenLeftX: 0x071c,
+        playerHitDetectFlag: 0x0722,
+        scrollLock: 0x0723,
+        areaOffset: 0x0750,
+        levelEntry: 0x0752,
+        lives: 0x075a,
+        preLevel: 0x075e,
         world: 0x075f,
-        level: 0x0760
+        level: 0x0760,
+        gameMode: 0x0770,
+        levelLoading: 0x0772,
+        scrollAmount: 0x0775,
+        playerCollisionBits: 0x0490,
+        enemyCollisionBits: 0x0491,
+        scoreStart: 0x07dd,
+        gameTimerHundreds: 0x07f8,
+        gameTimerTens: 0x07f9,
+        gameTimerOnes: 0x07fa,
       };
+      const PLAYER_STATES = new Map([
+        [0x00, "left-edge"],
+        [0x01, "climbing-vine"],
+        [0x02, "entering-reversed-l-pipe"],
+        [0x03, "going-down-pipe"],
+        [0x04, "autowalk"],
+        [0x05, "autowalk"],
+        [0x06, "player-dies"],
+        [0x07, "entering-area"],
+        [0x08, "normal"],
+        [0x09, "small-to-large"],
+        [0x0a, "large-to-small"],
+        [0x0b, "dying"],
+        [0x0c, "to-fire-mario"],
+      ]);
+      const VINE_TILES = new Set([0x08, 0x26, 0x56]);
+      const PIPE_TILES = new Set([
+        0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x1c, 0x1d, 0x1e, 0x1f, 0x20, 0x21,
+      ]);
+      const HIDDEN_BLOCK_TILES = new Set([0x5f]);
 
       const canvas = document.getElementById("screen");
       const singleRenderer = createCanvasRenderer(canvas);
       const ghostOverlay = document.getElementById("ghostOverlay");
       const ghostContext = ghostOverlay.getContext("2d");
+      let ghostDrawContext = ghostContext;
+      const eventPopupLayer = document.getElementById("eventPopupLayer");
       const singleViewer = document.getElementById("singleViewer");
+      const overlayLegendPanel = document.getElementById("overlayLegendPanel");
+      const overlayLegend = document.getElementById("overlayLegend");
       const gridPanel = document.getElementById("gridPanel");
       const gridViewer = document.getElementById("gridViewer");
       const gridControls = document.getElementById("gridControls");
@@ -491,11 +767,17 @@
       const gridSizeSelect = document.getElementById("gridSizeSelect");
       const overlayLimitSelect = document.getElementById("overlayLimitSelect");
       const trailLengthSelect = document.getElementById("trailLengthSelect");
-      const overlayOpacitySelect = document.getElementById("overlayOpacitySelect");
+      const overlayOpacitySelect = document.getElementById(
+        "overlayOpacitySelect",
+      );
+      const overlayLabelSelect = document.getElementById("overlayLabelSelect");
       const prevBatchButton = document.getElementById("prevBatchButton");
       const nextBatchButton = document.getElementById("nextBatchButton");
       const statusLine = document.getElementById("statusLine");
       const buttonList = document.getElementById("buttonList");
+      const aiIntentLine = document.getElementById("aiIntentLine");
+      const aiObservationGrid = document.getElementById("aiObservationGrid");
+      const aiEventList = document.getElementById("aiEventList");
       const findingsList = document.getElementById("findingsList");
       const coverageList = document.getElementById("coverageList");
       const gridSummary = document.getElementById("gridSummary");
@@ -514,6 +796,9 @@
       let replayInputs = [];
       let gridPlayers = [];
       let gridOffset = 0;
+      let previousAiSnapshot;
+      let activeVisualPopups = [];
+      let visualPopupSequence = 0;
       let playbackTimerId;
       let lastTimestamp = 0;
       let frameAccumulator = 0;
@@ -523,15 +808,18 @@
       });
 
       async function initialize() {
-        const [runResponse, stateResponse, romResponse, episodesResponse] = await Promise.all([
-          fetch("/api/run"),
-          fetch("/api/state"),
-          fetch("/api/rom"),
-          fetch("/api/episodes")
-        ]);
+        const [runResponse, stateResponse, romResponse, episodesResponse] =
+          await Promise.all([
+            fetch("/api/run"),
+            fetch("/api/state"),
+            fetch("/api/rom"),
+            fetch("/api/episodes"),
+          ]);
 
         if (!runResponse.ok || !stateResponse.ok || !romResponse.ok) {
-          throw new Error("Viewer could not load one or more local run assets.");
+          throw new Error(
+            "Viewer could not load one or more local run assets.",
+          );
         }
 
         run = await runResponse.json();
@@ -542,7 +830,7 @@
           episodeRecords = (run.sessions || []).map((session, index) => ({
             episode: session.agent?.episode ?? index + 1,
             session,
-            overlaySamples: []
+            overlaySamples: [],
           }));
         }
 
@@ -556,7 +844,9 @@
         document.getElementById("runSummary").textContent =
           `${run.run.id} · ${run.run.objective} · ${run.run.durationSeconds}s · seed ${run.run.seed}${discovery}`;
 
-        const hasEpisodeSidecar = Boolean(run.discovery?.episodeLog) || episodeRecords.length > (run.sessions || []).length;
+        const hasEpisodeSidecar =
+          Boolean(run.discovery?.episodeLog) ||
+          episodeRecords.length > (run.sessions || []).length;
         if (hasEpisodeSidecar) {
           sortSelect.value =
             run.discovery?.focus === "coverage"
@@ -572,7 +862,9 @@
           viewModeSelect.value = "overlay";
         }
 
-        personaSelect.addEventListener("change", () => selectSession(Number(personaSelect.value), { reset: true }));
+        personaSelect.addEventListener("change", () =>
+          selectSession(Number(personaSelect.value), { reset: true }),
+        );
         viewModeSelect.addEventListener("change", () => {
           stopPlayback();
           renderMode();
@@ -594,6 +886,7 @@
         });
         trailLengthSelect.addEventListener("change", drawGhostOverlay);
         overlayOpacitySelect.addEventListener("change", drawGhostOverlay);
+        overlayLabelSelect.addEventListener("change", drawGhostOverlay);
         prevBatchButton.addEventListener("click", () => {
           gridOffset = Math.max(0, gridOffset - gridSize());
           resetPlayback(0);
@@ -604,7 +897,9 @@
         });
         playPauseButton.addEventListener("click", togglePlayback);
         resetButton.addEventListener("click", () => resetPlayback(0));
-        checkpointButton.addEventListener("click", () => resetPlayback(currentSession?.agent?.prefixFrames || 0));
+        checkpointButton.addEventListener("click", () =>
+          resetPlayback(currentSession?.agent?.prefixFrames || 0),
+        );
         speedSelect.addEventListener("change", () => {
           frameAccumulator = 0;
           lastTimestamp = performance.now();
@@ -636,19 +931,25 @@
       }
 
       function renderSessionOptions(preferredSession) {
-        const sessions = episodeRecords.map((record, index) => ({ session: record.session, record, index }));
+        const sessions = episodeRecords.map((record, index) => ({
+          session: record.session,
+          record,
+          index,
+        }));
         sortedSessions = sortSessions(sessions, sortSelect.value);
         personaSelect.replaceChildren(
           ...sortedSessions.map((entry, displayIndex) => {
             const option = document.createElement("option");
             option.value = `${displayIndex}`;
-            option.textContent = sessionLabel(entry.session, entry.index);
+            option.textContent = sessionLabel(entry, entry.index);
             return option;
-          })
+          }),
         );
 
         const preferredIndex = preferredSession
-          ? sortedSessions.findIndex((entry) => entry.session === preferredSession)
+          ? sortedSessions.findIndex(
+              (entry) => entry.session === preferredSession,
+            )
           : 0;
         personaSelect.value = `${Math.max(0, preferredIndex)}`;
         updateBatchButtons();
@@ -657,55 +958,94 @@
       function sortSessions(sessions, mode) {
         const copy = [...sessions];
         if (mode === "score") {
-          return copy.sort((a, b) => (b.session.agent?.score || 0) - (a.session.agent?.score || 0));
+          return copy.sort((a, b) => displayScore(b) - displayScore(a));
         }
         if (mode === "progress") {
-          return copy.sort((a, b) => (b.session.metrics?.maxProgress || 0) - (a.session.metrics?.maxProgress || 0));
+          return copy.sort((a, b) => displayProgress(b) - displayProgress(a));
         }
         if (mode === "fastest") {
           return copy.sort((a, b) => {
             const aBest = fastestMilestoneFrame(a.session);
             const bBest = fastestMilestoneFrame(b.session);
             return (
-              (b.session.metrics?.maxProgress || 0) - (a.session.metrics?.maxProgress || 0) ||
+              displayProgress(b) - displayProgress(a) ||
               aBest - bBest ||
-              (b.session.agent?.speedScore || 0) - (a.session.agent?.speedScore || 0)
+              (b.session.agent?.speedScore || 0) -
+                (a.session.agent?.speedScore || 0)
             );
           });
         }
         if (mode === "game-score") {
-          return copy.sort((a, b) => (b.session.agent?.gameScoreDelta || 0) - (a.session.agent?.gameScoreDelta || 0));
+          return copy.sort(
+            (a, b) =>
+              (b.session.agent?.gameScoreDelta || 0) -
+              (a.session.agent?.gameScoreDelta || 0),
+          );
         }
         if (mode === "rooms") {
-          return copy.sort((a, b) => (b.session.agent?.roomTransitions || 0) - (a.session.agent?.roomTransitions || 0));
+          return copy.sort(
+            (a, b) =>
+              (b.session.agent?.roomTransitions || 0) -
+              (a.session.agent?.roomTransitions || 0),
+          );
         }
         if (mode === "coverage") {
           return copy.sort((a, b) => {
-            const bGoals = new Set(b.session.agent?.coverageGoalsHit || []).size;
-            const aGoals = new Set(a.session.agent?.coverageGoalsHit || []).size;
+            const bGoals = new Set(b.session.agent?.coverageGoalsHit || [])
+              .size;
+            const aGoals = new Set(a.session.agent?.coverageGoalsHit || [])
+              .size;
             return (
               bGoals - aGoals ||
-              (b.session.agent?.coverageScore || 0) - (a.session.agent?.coverageScore || 0) ||
-              (b.session.metrics?.maxProgress || 0) - (a.session.metrics?.maxProgress || 0)
+              (b.session.agent?.coverageScore || 0) -
+                (a.session.agent?.coverageScore || 0) ||
+              displayProgress(b) - displayProgress(a)
             );
           });
         }
         if (mode === "findings") {
-          return copy.sort((a, b) => (b.session.findings?.length || 0) - (a.session.findings?.length || 0));
+          return copy.sort(
+            (a, b) =>
+              (b.session.findings?.length || 0) -
+              (a.session.findings?.length || 0),
+          );
         }
         if (mode === "novelty") {
-          return copy.sort((a, b) => (b.session.agent?.newCells || 0) - (a.session.agent?.newCells || 0));
+          return copy.sort(
+            (a, b) =>
+              (b.session.agent?.newCells || 0) -
+              (a.session.agent?.newCells || 0),
+          );
         }
         return copy;
       }
 
-      function sessionLabel(session, index) {
+      function sessionLabel(entryOrSession, index) {
+        const session = entryOrSession.session || entryOrSession;
         if (session.agent) {
-          const progress = session.agent.progressDelta ? ` · progress +${session.agent.progressDelta}` : "";
-          const bugScore = session.agent.bugScore !== undefined ? ` · bug ${session.agent.bugScore}` : "";
-          const coverageScore = session.agent.coverageScore !== undefined ? ` · cov ${session.agent.coverageScore}` : "";
-          const gameScore = session.agent.gameScoreDelta !== undefined ? ` · game +${session.agent.gameScoreDelta}` : "";
-          return `#${session.agent.episode} ${session.persona} · score ${session.agent.score}${bugScore}${coverageScore}${gameScore} · bugs ${session.findings?.length || 0} · new ${session.agent.newCells}${progress}`;
+          const progress = session.agent.progressDelta
+            ? ` · progress +${session.agent.progressDelta}`
+            : "";
+          const bugScore =
+            session.agent.bugScore !== undefined
+              ? ` · bug ${session.agent.bugScore}`
+              : "";
+          const coverageScore =
+            session.agent.coverageScore !== undefined
+              ? ` · cov ${session.agent.coverageScore}`
+              : "";
+          const gameScore =
+            session.agent.gameScoreDelta !== undefined
+              ? ` · game +${session.agent.gameScoreDelta}`
+              : "";
+          const adjusted = displayScore(entryOrSession);
+          const rawScore = Number(session.agent.score ?? 0);
+          const scoreLabel =
+            session.metrics?.deaths > 0 &&
+            Math.round(adjusted) !== Math.round(rawScore)
+              ? `score ${Math.round(adjusted)} raw ${rawScore}`
+              : `score ${rawScore}`;
+          return `#${session.agent.episode} ${session.persona} · ${scoreLabel}${bugScore}${coverageScore}${gameScore} · bugs ${session.findings?.length || 0} · new ${session.agent.newCells}${progress}`;
         }
 
         return `${index + 1}. ${session.persona} (${session.status})`;
@@ -714,13 +1054,17 @@
       function selectSession(displayIndex, options = { reset: false }) {
         currentEntry = sortedSessions[displayIndex];
         currentSession = currentEntry?.session;
+        previousAiSnapshot = undefined;
+        clearVisualPopups();
         if (!currentSession) {
           setStatus("No session found in this run.", "bad");
           return;
         }
 
         personaSelect.value = `${displayIndex}`;
-        replayInputs = Array.isArray(currentSession.replayInputs) ? currentSession.replayInputs : [];
+        replayInputs = Array.isArray(currentSession.replayInputs)
+          ? currentSession.replayInputs
+          : [];
         renderSessionSummary();
         updateGridSelection();
         updateGridSummary();
@@ -736,20 +1080,26 @@
         const gridMode = isGridMode();
         const overlayMode = isOverlayMode();
         singleViewer.classList.toggle("hidden", gridMode);
+        overlayLegendPanel.classList.toggle("hidden", !overlayMode);
         gridPanel.classList.toggle("hidden", !gridMode);
         gridControls.classList.toggle("hidden", !gridMode);
         overlayControls.classList.toggle("hidden", !overlayMode);
-        ghostOverlay.classList.toggle("hidden", !overlayMode);
+        ghostOverlay.classList.add("hidden");
         if (!overlayMode) {
           clearGhostOverlay();
         }
-        checkpointButton.textContent = gridMode ? "Jump grid to checkpoint" : "Jump to checkpoint";
+        if (gridMode) {
+          clearVisualPopups();
+        }
+        checkpointButton.textContent = gridMode
+          ? "Jump grid to checkpoint"
+          : "Jump to checkpoint";
       }
 
       function createNes(onFrame) {
         const emulator = new jsnes.NES({
           emulateSound: false,
-          onFrame
+          onFrame,
         });
         emulator.loadROM(romData);
         emulator.fromJSON(JSON.parse(JSON.stringify(startState)));
@@ -766,12 +1116,20 @@
 
       function resetSinglePlayback(frame) {
         stopPlayback();
+        previousAiSnapshot = undefined;
+        clearVisualPopups();
         nes = createNes(singleRenderer.renderFrame);
         currentFrame = 0;
         activeButtons = new Set();
         renderButtons([]);
 
-        const targetFrame = Math.max(0, Math.min(frame, currentSession?.metrics?.frames || maxReplayFrame(replayInputs)));
+        const targetFrame = Math.max(
+          0,
+          Math.min(
+            frame,
+            currentSession?.metrics?.frames || maxReplayFrame(replayInputs),
+          ),
+        );
         for (let index = 0; index < targetFrame; index += 1) {
           stepSingleFrame(false);
         }
@@ -782,12 +1140,20 @@
         const canReplay = replayInputs.length > 0;
         playPauseButton.disabled = !canReplay;
         resetButton.disabled = false;
-        checkpointButton.disabled = !canReplay || !(currentSession?.agent?.prefixFrames > 0);
-        setStatus(canReplay ? "Ready to replay full persona run." : "This run has no full replayInputs. Re-run agents to enable full playback.", canReplay ? "good" : "warn");
+        checkpointButton.disabled =
+          !canReplay || !(currentSession?.agent?.prefixFrames > 0);
+        setStatus(
+          canReplay
+            ? "Ready to replay full persona run."
+            : "This run has no full replayInputs. Re-run agents to enable full playback.",
+          canReplay ? "good" : "warn",
+        );
       }
 
       function resetGridPlayback(frame) {
         stopPlayback();
+        previousAiSnapshot = undefined;
+        clearVisualPopups();
         nes = undefined;
         activeButtons = new Set();
         currentFrame = 0;
@@ -803,18 +1169,29 @@
         updateTelemetry();
         updateGridTileStates();
         updateBatchButtons();
-        const canReplay = gridPlayers.some((player) => player.replayInputs.length > 0);
+        const canReplay = gridPlayers.some(
+          (player) => player.replayInputs.length > 0,
+        );
         playPauseButton.disabled = !canReplay;
         resetButton.disabled = false;
-        checkpointButton.disabled = !canReplay || !(currentSession?.agent?.prefixFrames > 0);
-        setStatus(canReplay ? "Ready to replay synced grid." : "No visible grid episodes have full replayInputs.", canReplay ? "good" : "warn");
+        checkpointButton.disabled =
+          !canReplay || !(currentSession?.agent?.prefixFrames > 0);
+        setStatus(
+          canReplay
+            ? "Ready to replay synced grid."
+            : "No visible grid episodes have full replayInputs.",
+          canReplay ? "good" : "warn",
+        );
       }
 
       function renderGridTiles() {
         gridPlayers = [];
         gridViewer.replaceChildren();
 
-        const visibleEntries = sortedSessions.slice(gridOffset, gridOffset + gridSize());
+        const visibleEntries = sortedSessions.slice(
+          gridOffset,
+          gridOffset + gridSize(),
+        );
         if (!visibleEntries.length) {
           const placeholder = document.createElement("div");
           placeholder.className = "grid-placeholder";
@@ -834,11 +1211,11 @@
 
           const title = document.createElement("div");
           title.className = "grid-title";
-          title.textContent = shortGridLabel(entry.session, entry.index);
+          title.textContent = shortGridLabel(entry, entry.index);
 
           const meta = document.createElement("div");
           meta.className = "grid-meta";
-          meta.textContent = gridMeta(entry.session);
+          meta.textContent = gridMeta(entry);
 
           const state = document.createElement("div");
           state.className = "grid-meta";
@@ -853,7 +1230,9 @@
           tile.append(header, tileCanvas);
           gridViewer.appendChild(tile);
 
-          tile.addEventListener("click", () => selectSession(displayIndex, { reset: false }));
+          tile.addEventListener("click", () =>
+            selectSession(displayIndex, { reset: false }),
+          );
           tile.addEventListener("keydown", (event) => {
             if (event.key === "Enter" || event.key === " ") {
               event.preventDefault();
@@ -862,20 +1241,26 @@
           });
 
           const renderer = createCanvasRenderer(tileCanvas, 2);
-          const playerReplayInputs = Array.isArray(entry.session.replayInputs) ? entry.session.replayInputs : [];
+          const playerReplayInputs = Array.isArray(entry.session.replayInputs)
+            ? entry.session.replayInputs
+            : [];
           const player = {
             activeButtons: new Set(),
             displayIndex,
             entry,
             frame: 0,
             meta,
-            nes: playerReplayInputs.length ? createNes(renderer.renderFrame) : undefined,
+            nes: playerReplayInputs.length
+              ? createNes(renderer.renderFrame)
+              : undefined,
             replayInputs: playerReplayInputs,
             renderer,
             session: entry.session,
             state,
             tile,
-            totalFrames: entry.session.metrics?.frames || maxReplayFrame(playerReplayInputs)
+            totalFrames:
+              entry.session.metrics?.frames ||
+              maxReplayFrame(playerReplayInputs),
           };
           if (!playerReplayInputs.length) {
             state.textContent = "full replay unavailable";
@@ -911,7 +1296,10 @@
         if (!playing) {
           return;
         }
-        playbackTimerId = window.setTimeout(() => playbackLoop(performance.now()), delay);
+        playbackTimerId = window.setTimeout(
+          () => playbackLoop(performance.now()),
+          delay,
+        );
       }
 
       function playbackLoop(timestamp) {
@@ -925,7 +1313,9 @@
         frameAccumulator += (elapsed / 1000) * 60 * speed;
 
         while (frameAccumulator >= 1) {
-          const advanced = isGridMode() ? stepGridFrame(true) : stepSingleFrame(true);
+          const advanced = isGridMode()
+            ? stepGridFrame(true)
+            : stepSingleFrame(true);
           if (!advanced) {
             stopPlayback();
             setStatus("Replay complete.", "good");
@@ -939,7 +1329,11 @@
       }
 
       function stepSingleFrame(render) {
-        if (!nes || currentFrame >= (currentSession?.metrics?.frames || maxReplayFrame(replayInputs))) {
+        if (
+          !nes ||
+          currentFrame >=
+            (currentSession?.metrics?.frames || maxReplayFrame(replayInputs))
+        ) {
           return false;
         }
 
@@ -966,7 +1360,11 @@
             continue;
           }
           const buttons = buttonsForFrame(player.replayInputs, currentFrame);
-          player.activeButtons = applyButtonsTo(player.nes, player.activeButtons, buttons);
+          player.activeButtons = applyButtonsTo(
+            player.nes,
+            player.activeButtons,
+            buttons,
+          );
           player.nes.frame();
           player.frame = currentFrame;
         }
@@ -993,8 +1391,13 @@
       }
 
       function buttonsForFrame(ranges, frame) {
-        const range = ranges.find((candidate) => candidate.frameStart <= frame && candidate.frameEnd >= frame);
-        return range ? range.buttons.filter((button) => BUTTONS.includes(button)) : [];
+        const range = ranges.find(
+          (candidate) =>
+            candidate.frameStart <= frame && candidate.frameEnd >= frame,
+        );
+        return range
+          ? range.buttons.filter((button) => BUTTONS.includes(button))
+          : [];
       }
 
       function createCanvasRenderer(targetCanvas, renderEvery = 1) {
@@ -1021,79 +1424,705 @@
               imageData.data[offset + 3] = 0xff;
             }
             context.putImageData(imageData, 0, 0);
-          }
+          },
+          redrawFrame() {
+            context.putImageData(imageData, 0, 0);
+          },
         };
+      }
+
+      function renderAiMoment(snapshot, buttons) {
+        const inputRange = currentInputRange(
+          currentSession?.replayInputs || [],
+          currentFrame,
+        );
+        aiIntentLine.textContent = describeAiIntent(
+          snapshot,
+          buttons,
+          inputRange,
+        );
+        aiObservationGrid.replaceChildren(
+          aiCell(
+            "State",
+            `${snapshot.playerStateName || "unknown"} · ${snapshot.dying ? "dying" : "alive"}`,
+          ),
+          aiCell(
+            "Position",
+            `w${snapshot.world}-${snapshot.level} · screen ${snapshot.currentScreen} · x ${snapshot.xOnScreen} y ${snapshot.yOnScreen}`,
+          ),
+          aiCell(
+            "Camera",
+            `left ${cameraOriginForSnapshot(snapshot)} · fine ${snapshot.screenLeftX ?? 0}`,
+          ),
+          aiCell(
+            "Progress",
+            `${snapshot.progress} / best ${currentSession?.metrics?.maxProgress ?? "-"}`,
+          ),
+          aiCell(
+            "Room",
+            snapshot.roomId || `area ${snapshot.areaOffset ?? "-"}`,
+          ),
+          aiCell(
+            "Score",
+            `${snapshot.score ?? 0} · coins ${snapshot.coins ?? 0}`,
+          ),
+          aiCell("Enemies", enemySummary(snapshot)),
+          aiCell(
+            "Timer/Lives",
+            `${snapshot.gameTimer ?? "-"} · lives ${snapshot.lives ?? "-"}`,
+          ),
+          aiCell(
+            "Motion",
+            `vx ${snapshot.horizontalSpeed ?? 0} · |vx| ${snapshot.horizontalSpeedAbs ?? 0} · vy ${snapshot.verticalVelocity ?? 0}`,
+          ),
+          aiCell(
+            "Collision",
+            `player ${hexByte(snapshot.playerCollisionBits)} · enemy ${hexByte(snapshot.enemyCollisionBits)} · hit ${hexByte(snapshot.playerHitDetectFlag)}`,
+          ),
+          aiCell(
+            "Flow",
+            `mode ${snapshot.gameMode ?? "-"} · loading ${snapshot.levelLoading ?? "-"} · change ${snapshot.changeAreaTimer ?? 0}`,
+          ),
+          aiCell("Signals", specialSignalSummary(snapshot)),
+        );
+
+        const events = aiMomentEvents(snapshot, buttons, inputRange);
+        aiEventList.replaceChildren(...events.map((event) => aiEvent(event)));
+        renderVisualPopups(events);
+        previousAiSnapshot = cloneAiSnapshot(snapshot);
+      }
+
+      function aiCell(label, value) {
+        const node = document.createElement("div");
+        node.className = "ai-cell";
+        const labelNode = document.createElement("span");
+        labelNode.textContent = label;
+        const valueNode = document.createElement("strong");
+        valueNode.textContent = value;
+        node.append(labelNode, valueNode);
+        return node;
+      }
+
+      function aiEvent(event) {
+        const node = document.createElement("div");
+        node.className = `ai-event ${event.tone || ""}`.trim();
+        const label = document.createElement("span");
+        label.textContent = event.label;
+        const body = document.createElement("div");
+        body.textContent = event.body;
+        node.append(label, body);
+        return node;
+      }
+
+      function describeAiIntent(snapshot, buttons, inputRange) {
+        const action = describeButtons(buttons, snapshot);
+        const range = inputRange
+          ? `frames ${inputRange.frameStart}-${inputRange.frameEnd}`
+          : `frame ${currentFrame}`;
+        const agent = currentSession?.agent;
+        const mode =
+          agent?.phase || agent?.type || currentSession?.persona || "replay";
+        if (snapshot.dying) {
+          return `${range}: terminal death state. ${mode} should stop scoring and stop exploring from this point.`;
+        }
+        return `${range}: ${action}. ${mode}${agent?.mutation ? ` · ${agent.mutation}` : ""}`;
+      }
+
+      function describeButtons(buttons, snapshot) {
+        const set = new Set(buttons);
+        if (!buttons.length) {
+          return snapshot.levelLoading
+            ? "waiting through level transition/loading"
+            : "idle/observe";
+        }
+        const parts = [];
+        if (set.has("RIGHT") && set.has("B")) parts.push("speed-run right");
+        else if (set.has("RIGHT")) parts.push("move right");
+        if (set.has("LEFT")) parts.push("left correction/backtrack");
+        if (set.has("A")) parts.push("jump");
+        if (set.has("DOWN"))
+          parts.push(
+            snapshot.pipeInteraction
+              ? "pipe-entry/down probe"
+              : "crouch/down probe",
+          );
+        if (set.has("UP"))
+          parts.push(
+            snapshot.vineVisible || snapshot.onVine ? "vine climb" : "up probe",
+          );
+        return parts.length ? parts.join(" + ") : buttons.join("+");
+      }
+
+      function aiMomentEvents(snapshot, buttons, inputRange) {
+        const events = [];
+        const activeGameplay =
+          snapshot.gameMode === 1 &&
+          snapshot.levelLoading === 0 &&
+          snapshot.playerStateName !== "left-edge";
+        const previous = previousAiSnapshot;
+        if (previous && currentFrame > 0) {
+          const scoreDelta = (snapshot.score ?? 0) - (previous.score ?? 0);
+          if (scoreDelta > 0) {
+            events.push({
+              label: "Score increased",
+              body: `SMB score +${scoreDelta} (${previous.score ?? 0} -> ${snapshot.score ?? 0}).`,
+              tone: "good",
+              popup: true,
+            });
+          }
+          const coinDelta = (snapshot.coins ?? 0) - (previous.coins ?? 0);
+          if (coinDelta > 0) {
+            events.push({
+              label: "Coin collected",
+              body: `Coins +${coinDelta} (${previous.coins ?? 0} -> ${snapshot.coins ?? 0}).`,
+              tone: "good",
+              popup: true,
+            });
+          }
+          const progressDelta =
+            (snapshot.progress ?? 0) - (previous.progress ?? 0);
+          if (activeGameplay && progressDelta >= 32) {
+            events.push({
+              label: "Fast progress",
+              body: `Progress jumped +${progressDelta} since the previous rendered moment.`,
+              tone: "good",
+              popup: true,
+              popupKey: "Fast progress",
+            });
+          } else if (activeGameplay && progressDelta <= -32) {
+            events.push({
+              label: "Backtrack/transition",
+              body: `Progress changed ${progressDelta}, usually a room transition or backward movement.`,
+              tone: "warning",
+              popup: true,
+            });
+          }
+          if ((snapshot.lives ?? 0) < (previous.lives ?? 0)) {
+            events.push({
+              label: "Life lost",
+              body: `Lives changed ${previous.lives} -> ${snapshot.lives}.`,
+              tone: "bad",
+              popup: true,
+            });
+          }
+          if ((snapshot.gameTimer ?? 0) < (previous.gameTimer ?? 0) - 1) {
+            events.push({
+              label: "Timer tick",
+              body: `Timer changed ${previous.gameTimer} -> ${snapshot.gameTimer}.`,
+            });
+          }
+          if (
+            snapshot.roomId &&
+            previous.roomId &&
+            snapshot.roomId !== previous.roomId
+          ) {
+            events.push({
+              label: "Room changed",
+              body: `${previous.roomId} -> ${snapshot.roomId}.`,
+              tone: "good",
+              popup: true,
+            });
+          }
+
+          const previousEnemies = enemyTypeSet(previous);
+          const currentEnemies = enemyTypeSet(snapshot);
+          const appeared = [...currentEnemies].filter(
+            (enemy) => !previousEnemies.has(enemy),
+          );
+          const disappeared = [...previousEnemies].filter(
+            (enemy) => !currentEnemies.has(enemy),
+          );
+          if (appeared.length) {
+            events.push({
+              label: "Enemy spotted",
+              body: `New enemy/object type(s): ${appeared.map(enemyName).join(", ")}.`,
+              tone: "warning",
+              popup: true,
+            });
+          }
+          if (disappeared.length) {
+            events.push({
+              label: "Enemy cleared/despawned",
+              body: `No longer visible: ${disappeared.map(enemyName).join(", ")}.`,
+              tone: "good",
+              popup: true,
+            });
+          }
+        }
+
+        if (enemyTypeSet(snapshot).size > 0) {
+          events.push({
+            label: "Enemy/object visible",
+            body: enemySummary(snapshot),
+            tone: "warning",
+          });
+        }
+        const activeFindings = (currentSession?.findings || []).filter(
+          (finding) =>
+            finding.frameStart <= currentFrame &&
+            finding.frameEnd >= currentFrame,
+        );
+        for (const finding of activeFindings) {
+          events.push({
+            label: `${finding.severity.toUpperCase()} finding active`,
+            body: `${finding.type}: ${finding.summary}`,
+            tone:
+              finding.severity === "high"
+                ? "bad"
+                : finding.severity === "medium"
+                  ? "warning"
+                  : "",
+            popup: true,
+            popupKey: `finding-${finding.type}-${finding.frameStart}`,
+          });
+        }
+
+        const milestones = Object.entries(
+          currentSession?.agent?.milestoneFrames || {},
+        ).filter(([, frame]) => Math.abs(frame - currentFrame) <= 2);
+        for (const [name, frame] of milestones) {
+          events.push({
+            label: "Milestone",
+            body: `${name} reached at frame ${frame}.`,
+            tone: "good",
+            popup: true,
+            popupKey: `milestone-${name}`,
+          });
+        }
+
+        if (
+          currentSession?.agent?.prefixFrames !== undefined &&
+          Math.abs(currentFrame - currentSession.agent.prefixFrames) <= 1
+        ) {
+          events.push({
+            label: "Checkpoint boundary",
+            body: `Replay prefix ends here; this episode's explored suffix starts at frame ${currentSession.agent.prefixFrames}.`,
+            tone: "good",
+            popup: true,
+          });
+        }
+
+        const obstacleFrame = currentSession?.agent?.obstacleFrame;
+        const obstacleEnd =
+          obstacleFrame === undefined
+            ? undefined
+            : obstacleFrame +
+              (currentSession.agent?.obstacleDurationFrames || 60);
+        if (
+          obstacleFrame !== undefined &&
+          currentFrame >= obstacleFrame &&
+          currentFrame <= obstacleEnd
+        ) {
+          events.push({
+            label: "Obstacle window",
+            body: `${currentSession.agent?.obstacleReason || "forward progress blocked"} near progress ${currentSession.agent?.obstacleProgress ?? snapshot.progress}.`,
+            tone: "warning",
+            popup: true,
+            popupKey: "obstacle-window",
+          });
+        }
+
+        if (snapshot.dying) {
+          events.push({
+            label: "Death",
+            body: "RAM indicates Mario is dying or death music is active.",
+            tone: "bad",
+            popup: true,
+          });
+        }
+        if (!activeGameplay) {
+          events.push({
+            label: "Loading/transition",
+            body: `Game is not in active controllable play. mode=${snapshot.gameMode}, loading=${snapshot.levelLoading}, state=${snapshot.playerStateName}.`,
+          });
+        }
+        if (snapshot.enteringPipe || snapshot.changeAreaTimer > 0) {
+          events.push({
+            label: "Transition/pipe",
+            body: `Pipe or area transition signal active. changeAreaTimer=${snapshot.changeAreaTimer}.`,
+            tone: "good",
+            popup:
+              !previous ||
+              !previous.enteringPipe ||
+              previous.changeAreaTimer === 0,
+          });
+        } else if (snapshot.pipeInteraction) {
+          events.push({
+            label: "Pipe geometry",
+            body: `${snapshot.pipeTileCount} pipe tiles visible/nearby.`,
+            tone: "warning",
+            popup: Boolean(previous && !previous.pipeInteraction),
+          });
+        }
+        if (snapshot.vineVisible || snapshot.onVine) {
+          events.push({
+            label: "Vine signal",
+            body: `Vine visible/on-vine signal active. vineTiles=${snapshot.vineTileCount}.`,
+            tone: "good",
+            popup: Boolean(
+              !previous || (!previous.vineVisible && !previous.onVine),
+            ),
+          });
+        }
+        if (snapshot.warpZoneVisible) {
+          events.push({
+            label: "Warp signal",
+            body: `Warp-zone indicator active. warpZoneControl=${snapshot.warpZoneControl}.`,
+            tone: "good",
+            popup: Boolean(!previous || !previous.warpZoneVisible),
+          });
+        }
+        if (snapshot.hiddenBlockTileCount > 0) {
+          events.push({
+            label: "Hidden block signal",
+            body: `${snapshot.hiddenBlockTileCount} hidden block tile markers detected in tile RAM.`,
+            tone: "good",
+            popup: Boolean(!previous || previous.hiddenBlockTileCount <= 0),
+          });
+        }
+        if (
+          activeGameplay &&
+          (snapshot.scrollLock > 0 ||
+            snapshot.playerCollisionBits !== 0xff ||
+            snapshot.playerHitDetectFlag !== 0)
+        ) {
+          events.push({
+            label: "Collision/scroll pressure",
+            body: `scrollLock=${snapshot.scrollLock}, collision=${hexByte(snapshot.playerCollisionBits)}, hit=${hexByte(snapshot.playerHitDetectFlag)}.`,
+            tone: "warning",
+            popup: Boolean(
+              previous &&
+              previous.scrollLock === 0 &&
+              previous.playerCollisionBits === 0xff &&
+              previous.playerHitDetectFlag === 0,
+            ),
+          });
+        }
+        if (inputRange) {
+          events.push({
+            label: "Input window",
+            body: `${inputRange.buttons.length ? inputRange.buttons.join("+") : "no buttons"} from frame ${inputRange.frameStart} to ${inputRange.frameEnd}.`,
+          });
+        }
+        if (!events.length) {
+          events.push({
+            label: "No event",
+            body: "No finding, milestone, transition, collision, or special-object signal is active at this frame.",
+          });
+        }
+        return events;
+      }
+
+      function currentInputRange(ranges, frame) {
+        return ranges.find(
+          (candidate) =>
+            candidate.frameStart <= frame && candidate.frameEnd >= frame,
+        );
+      }
+
+      function renderVisualPopups(events) {
+        if (!eventPopupLayer) {
+          return;
+        }
+        if (isGridMode()) {
+          clearVisualPopups();
+          return;
+        }
+
+        for (const event of events.filter((candidate) => candidate.popup)) {
+          const key = event.popupKey || `${event.label}|${event.body}`;
+          const duplicate = activeVisualPopups.find(
+            (popup) => popup.key === key && popup.expiresFrame >= currentFrame,
+          );
+          if (duplicate) {
+            duplicate.expiresFrame = Math.max(
+              duplicate.expiresFrame,
+              currentFrame + 105,
+            );
+            continue;
+          }
+
+          activeVisualPopups.unshift({
+            id: (visualPopupSequence += 1),
+            key,
+            label: event.label,
+            body: event.body,
+            tone: event.tone || "",
+            createdFrame: currentFrame,
+            expiresFrame: currentFrame + 150,
+          });
+        }
+
+        activeVisualPopups = activeVisualPopups
+          .filter((popup) => popup.expiresFrame >= currentFrame)
+          .slice(0, 5);
+
+        const desiredNodes = activeVisualPopups.map((popup, index) => {
+          const node = popupNodeFor(popup);
+          updatePopupNode(node, popup, index);
+          return node;
+        });
+
+        for (const child of [...eventPopupLayer.children]) {
+          if (!desiredNodes.includes(child)) {
+            child.remove();
+          }
+        }
+
+        desiredNodes.forEach((node, index) => {
+          if (eventPopupLayer.children[index] !== node) {
+            eventPopupLayer.insertBefore(
+              node,
+              eventPopupLayer.children[index] || null,
+            );
+          }
+        });
+      }
+
+      function popupNodeFor(popup) {
+        const id = String(popup.id);
+        const existing = eventPopupLayer.querySelector(
+          `[data-popup-id="${id}"]`,
+        );
+        if (existing) {
+          return existing;
+        }
+
+        const node = document.createElement("div");
+        node.dataset.popupId = id;
+        node.className = "event-popup";
+        node.append(
+          document.createElement("strong"),
+          document.createElement("span"),
+        );
+        return node;
+      }
+
+      function updatePopupNode(node, popup, index) {
+        node.className = `event-popup ${popup.tone}`.trim();
+        node.style.top = `${8 + index * 48}px`;
+        const remaining = popup.expiresFrame - currentFrame;
+        node.style.opacity = `${Math.max(0.15, Math.min(1, remaining / 24))}`;
+        node.querySelector("strong").textContent = popup.label;
+        node.querySelector("span").textContent = popup.body;
+      }
+
+      function clearVisualPopups() {
+        activeVisualPopups = [];
+        eventPopupLayer?.replaceChildren();
+      }
+
+      function cloneAiSnapshot(snapshot) {
+        return {
+          score: snapshot.score,
+          coins: snapshot.coins,
+          progress: snapshot.progress,
+          lives: snapshot.lives,
+          gameTimer: snapshot.gameTimer,
+          roomId: snapshot.roomId,
+          enemyTypes: [...(snapshot.enemyTypes || [])],
+          enteringPipe: snapshot.enteringPipe,
+          changeAreaTimer: snapshot.changeAreaTimer,
+          pipeInteraction: snapshot.pipeInteraction,
+          vineVisible: snapshot.vineVisible,
+          onVine: snapshot.onVine,
+          warpZoneVisible: snapshot.warpZoneVisible,
+          hiddenBlockTileCount: snapshot.hiddenBlockTileCount,
+          scrollLock: snapshot.scrollLock,
+          playerCollisionBits: snapshot.playerCollisionBits,
+          playerHitDetectFlag: snapshot.playerHitDetectFlag,
+        };
+      }
+
+      function enemyTypeSet(snapshot) {
+        return new Set(
+          (snapshot.enemyTypes || []).filter((type) => type !== 0),
+        );
+      }
+
+      function enemySummary(snapshot) {
+        const enemies = [...enemyTypeSet(snapshot)];
+        if (!enemies.length) {
+          return "none visible";
+        }
+        return enemies.map(enemyName).join(", ");
+      }
+
+      function enemyName(type) {
+        const names = {
+          0x06: "Goomba",
+          0x07: "Koopa",
+          0x08: "Koopa",
+          0x09: "Buzzy Beetle",
+          0x0a: "Bullet Bill",
+          0x0b: "Blooper",
+          0x0c: "Cheep Cheep",
+          0x0d: "Podoboo",
+          0x10: "Piranha Plant",
+          0x11: "Lakitu",
+          0x12: "Spiny",
+          0x2d: "lift/platform",
+          0x2e: "lift/platform",
+          0x2f: "vine",
+          0x30: "flagpole",
+          0x31: "star flag object",
+          0x34: "warp-zone text/object",
+        };
+        return names[type]
+          ? `${names[type]} (${hexByte(type)})`
+          : `object ${hexByte(type)}`;
+      }
+
+      function specialSignalSummary(snapshot) {
+        const signals = [];
+        if (snapshot.pipeInteraction) signals.push("pipe");
+        if (snapshot.vineVisible || snapshot.onVine) signals.push("vine");
+        if (snapshot.warpZoneVisible) signals.push("warp");
+        if (snapshot.hiddenBlockTileCount > 0) signals.push("hidden block");
+        if (snapshot.scrollLock > 0) signals.push("scroll lock");
+        if (snapshot.dying) signals.push("death");
+        return signals.length ? signals.join(", ") : "none";
       }
 
       function renderSessionSummary() {
         const metrics = currentSession.metrics || {};
-        document.getElementById("statusMetric").textContent = currentSession.status || "-";
-        document.getElementById("deathsMetric").textContent = metrics.deaths ?? 0;
-        document.getElementById("findingsMetric").textContent = currentSession.findings?.length ?? 0;
+        document.getElementById("statusMetric").textContent =
+          currentSession.status || "-";
+        document.getElementById("deathsMetric").textContent =
+          metrics.deaths ?? 0;
+        document.getElementById("findingsMetric").textContent =
+          currentSession.findings?.length ?? 0;
 
-        coverageList.replaceChildren(...(currentSession.coverage || []).map((item) => pill(item)));
+        coverageList.replaceChildren(
+          ...(currentSession.coverage || []).map((item) => pill(item)),
+        );
         if (!coverageList.children.length) {
           coverageList.appendChild(pill("none"));
         }
 
         if (currentSession.agent) {
           coverageList.appendChild(pill(`score ${currentSession.agent.score}`));
+          const adjustedScore = displayScore(currentEntry || currentSession);
+          if (
+            currentSession.metrics?.deaths > 0 &&
+            Math.round(adjustedScore) !==
+              Math.round(Number(currentSession.agent.score ?? 0))
+          ) {
+            coverageList.appendChild(
+              pill(`quality score ${Math.round(adjustedScore)}`),
+            );
+          }
           if (currentSession.agent.progressScore !== undefined) {
-            coverageList.appendChild(pill(`progress score ${currentSession.agent.progressScore}`));
+            coverageList.appendChild(
+              pill(`progress score ${currentSession.agent.progressScore}`),
+            );
           }
           if (currentSession.agent.bugScore !== undefined) {
-            coverageList.appendChild(pill(`bug score ${currentSession.agent.bugScore}`));
+            coverageList.appendChild(
+              pill(`bug score ${currentSession.agent.bugScore}`),
+            );
           }
           if (currentSession.agent.coverageScore !== undefined) {
-            coverageList.appendChild(pill(`coverage score ${currentSession.agent.coverageScore}`));
+            coverageList.appendChild(
+              pill(`coverage score ${currentSession.agent.coverageScore}`),
+            );
           }
           if (currentSession.agent.routeScore !== undefined) {
-            coverageList.appendChild(pill(`route score ${currentSession.agent.routeScore}`));
+            coverageList.appendChild(
+              pill(`route score ${currentSession.agent.routeScore}`),
+            );
           }
           if (currentSession.agent.speedScore !== undefined) {
-            coverageList.appendChild(pill(`speed score ${currentSession.agent.speedScore}`));
+            coverageList.appendChild(
+              pill(`speed score ${currentSession.agent.speedScore}`),
+            );
           }
           if (currentSession.agent.roomScore !== undefined) {
-            coverageList.appendChild(pill(`room score ${currentSession.agent.roomScore}`));
+            coverageList.appendChild(
+              pill(`room score ${currentSession.agent.roomScore}`),
+            );
           }
           if (currentSession.agent.gameScoreDelta !== undefined) {
-            coverageList.appendChild(pill(`game +${currentSession.agent.gameScoreDelta}`));
+            coverageList.appendChild(
+              pill(`game +${currentSession.agent.gameScoreDelta}`),
+            );
           }
           if (currentSession.agent.roomTransitions !== undefined) {
-            coverageList.appendChild(pill(`rooms ${currentSession.agent.roomTransitions}`));
+            coverageList.appendChild(
+              pill(`rooms ${currentSession.agent.roomTransitions}`),
+            );
           }
-          for (const goal of (currentSession.agent.coverageGoalsHit || []).slice(0, 10)) {
+          if (currentSession.agent.phase) {
+            coverageList.appendChild(
+              pill(`phase ${currentSession.agent.phase}`),
+            );
+          }
+          if (currentSession.agent.rlEpsilon !== undefined) {
+            coverageList.appendChild(
+              pill(`epsilon ${currentSession.agent.rlEpsilon}`),
+            );
+          }
+          if (currentSession.agent.rlStateCount !== undefined) {
+            coverageList.appendChild(
+              pill(`rl states ${currentSession.agent.rlStateCount}`),
+            );
+          }
+          for (const goal of (
+            currentSession.agent.coverageGoalsHit || []
+          ).slice(0, 10)) {
             coverageList.appendChild(pill(goal));
           }
-          coverageList.appendChild(pill(`new cells ${currentSession.agent.newCells}`));
+          coverageList.appendChild(
+            pill(`new cells ${currentSession.agent.newCells}`),
+          );
           if (currentSession.agent.focus) {
-            coverageList.appendChild(pill(`focus ${currentSession.agent.focus}`));
+            coverageList.appendChild(
+              pill(`focus ${currentSession.agent.focus}`),
+            );
           }
           if (currentSession.agent.bugTarget) {
-            coverageList.appendChild(pill(`target ${currentSession.agent.bugTarget}`));
+            coverageList.appendChild(
+              pill(`target ${currentSession.agent.bugTarget}`),
+            );
           }
           if (currentSession.agent.type) {
             coverageList.appendChild(pill(currentSession.agent.type));
           }
           if (currentSession.agent.prefixFrames !== undefined) {
-            coverageList.appendChild(pill(`prefix ${currentSession.agent.prefixFrames}f`));
+            coverageList.appendChild(
+              pill(`prefix ${currentSession.agent.prefixFrames}f`),
+            );
           }
           if (currentSession.agent.suffixFrames !== undefined) {
-            coverageList.appendChild(pill(`suffix ${currentSession.agent.suffixFrames}f`));
+            coverageList.appendChild(
+              pill(`suffix ${currentSession.agent.suffixFrames}f`),
+            );
           }
           if (currentSession.agent.progressDelta !== undefined) {
-            coverageList.appendChild(pill(`progress +${currentSession.agent.progressDelta}`));
+            coverageList.appendChild(
+              pill(`progress +${currentSession.agent.progressDelta}`),
+            );
           }
           if (currentSession.agent.targetReached !== undefined) {
-            coverageList.appendChild(pill(currentSession.agent.targetReached ? "target reached" : "target pending"));
+            coverageList.appendChild(
+              pill(
+                currentSession.agent.targetReached
+                  ? "target reached"
+                  : "target pending",
+              ),
+            );
           }
           if (currentSession.agent.obstacleFrame !== undefined) {
             coverageList.appendChild(
-              pill(`obstacle ${currentSession.agent.obstacleProgress ?? "-"} @ ${currentSession.agent.obstacleFrame}f`)
+              pill(
+                `obstacle ${currentSession.agent.obstacleProgress ?? "-"} @ ${currentSession.agent.obstacleFrame}f`,
+              ),
             );
           }
           if (currentSession.agent.startCell) {
-            coverageList.appendChild(pill(`start ${currentSession.agent.startCell.slice(0, 28)}`));
+            coverageList.appendChild(
+              pill(`start ${currentSession.agent.startCell.slice(0, 28)}`),
+            );
           }
           coverageList.appendChild(pill(currentSession.agent.mutation));
         }
@@ -1137,7 +2166,9 @@
         const button = document.createElement("button");
         button.textContent = "Jump to finding";
         button.disabled = replayInputs.length === 0;
-        button.addEventListener("click", () => resetPlayback(Math.max(0, finding.frameStart - 1)));
+        button.addEventListener("click", () =>
+          resetPlayback(Math.max(0, finding.frameStart - 1)),
+        );
 
         section.append(title, summary, details, repro, button);
         return section;
@@ -1150,7 +2181,9 @@
         return ranges
           .slice(0, 4)
           .map((range) => {
-            const buttons = range.buttons.length ? range.buttons.join("+") : "none";
+            const buttons = range.buttons.length
+              ? range.buttons.join("+")
+              : "none";
             return `${range.frameStart}-${range.frameEnd}: ${buttons}`;
           })
           .join(" · ");
@@ -1160,69 +2193,100 @@
         buttonList.replaceChildren(
           ...BUTTONS.map((button) => {
             const span = document.createElement("span");
-            span.className = buttons.includes(button) ? "controller-button active" : "controller-button";
+            span.className = buttons.includes(button)
+              ? "controller-button active"
+              : "controller-button";
             span.textContent = button;
             return span;
-          })
+          }),
         );
       }
 
       function updateTelemetry() {
-        const snapshot = isGridMode() ? readSnapshot(selectedGridPlayer()?.nes) : readSnapshot(nes);
+        const snapshot = isGridMode()
+          ? readSnapshot(selectedGridPlayer()?.nes)
+          : readSnapshot(nes);
+        const buttons = buttonsForFrame(replayInputs, currentFrame);
         document.getElementById("frameMetric").textContent = `${currentFrame}`;
-        document.getElementById("timeMetric").textContent = `${(currentFrame / 60).toFixed(2)}s`;
-        document.getElementById("progressMetric").textContent = `${snapshot.progress}`;
+        document.getElementById("timeMetric").textContent =
+          `${(currentFrame / 60).toFixed(2)}s`;
+        document.getElementById("progressMetric").textContent =
+          `${snapshot.progress}`;
+        renderAiMoment(snapshot, buttons);
       }
 
       function updateGridTileStates() {
         for (const player of gridPlayers) {
           const snapshot = readSnapshot(player.nes);
-          const done = player.replayInputs.length > 0 && currentFrame >= player.totalFrames;
+          const done =
+            player.replayInputs.length > 0 &&
+            currentFrame >= player.totalFrames;
           player.state.textContent = done
             ? `complete · ${player.totalFrames}f · progress ${snapshot.progress}`
             : `frame ${Math.min(currentFrame, player.totalFrames)} · progress ${snapshot.progress}`;
         }
         updateGridSelection();
+        updateTelemetry();
       }
 
       function updateGridSelection() {
         for (const player of gridPlayers) {
-          player.tile.classList.toggle("selected", player.session === currentSession);
+          player.tile.classList.toggle(
+            "selected",
+            player.session === currentSession,
+          );
         }
       }
 
       function drawGhostOverlay() {
-        clearGhostOverlay();
+        ghostContext.clearRect(0, 0, ghostOverlay.width, ghostOverlay.height);
+        ghostOverlay.dataset.ghosts = "0";
         if (!isOverlayMode() || !episodeRecords.length) {
+          renderOverlayLegend([], 0);
           return;
         }
 
+        singleRenderer.redrawFrame();
+        ghostDrawContext = singleRenderer.context;
         const base = readSnapshot(nes);
         const baseFrame = Math.max(1, currentFrame);
-        const cameraOrigin = base.progress - (base.xOnScreen || 0);
+        const cameraOrigin = cameraOriginForSnapshot(base);
         const entries = overlayEntries();
+        const labelMode = overlayLabelSelect.value || "first25";
+        const legendItems = [];
         let ghostsDrawn = 0;
 
-        ghostContext.save();
-        ghostContext.lineCap = "round";
-        ghostContext.lineJoin = "round";
+        ghostDrawContext.save();
+        ghostDrawContext.lineCap = "round";
+        ghostDrawContext.lineJoin = "round";
         for (const [overlayIndex, entry] of entries.entries()) {
-          const samples = Array.isArray(entry.record?.overlaySamples) ? entry.record.overlaySamples : [];
+          const samples = visibleOverlaySamples(
+            entry.record?.overlaySamples,
+            baseFrame,
+          );
           if (!samples.length) {
             continue;
           }
 
-          const color = colorForEpisode(entry.record?.episode ?? entry.index ?? overlayIndex);
+          const color = colorForEpisode(
+            entry.record?.episode ?? entry.index ?? overlayIndex,
+          );
           const opacity = Number(overlayOpacitySelect.value) || 0.65;
-          const jitter = ghostJitter(entry.record?.episode ?? entry.index ?? overlayIndex);
-          const trailSamples = samplesForTrail(samples, baseFrame, trailLengthFrames())
+          const jitter = ghostJitter(
+            entry.record?.episode ?? entry.index ?? overlayIndex,
+          );
+          const trailSamples = samplesForTrail(
+            samples,
+            baseFrame,
+            trailLengthFrames(),
+          )
             .map((sample) => sampleToScreen(sample, base, cameraOrigin, jitter))
             .filter(Boolean);
 
           if (trailSamples.length > 1) {
-            ghostContext.strokeStyle = hexToRgba(color, opacity * 0.42);
-            ghostContext.lineWidth = 1.2;
-            ghostContext.beginPath();
+            ghostDrawContext.strokeStyle = hexToRgba(color, opacity * 0.42);
+            ghostDrawContext.lineWidth = 1.2;
+            ghostDrawContext.beginPath();
             let drawing = false;
             let previous;
             for (const point of trailSamples) {
@@ -1231,51 +2295,151 @@
                 Math.abs(point.trailX - previous.trailX) > 70 ||
                 Math.abs(point.trailY - previous.trailY) > 90
               ) {
-                ghostContext.moveTo(point.trailX, point.trailY);
+                ghostDrawContext.moveTo(point.trailX, point.trailY);
                 drawing = false;
               } else {
-                ghostContext.lineTo(point.trailX, point.trailY);
+                ghostDrawContext.lineTo(point.trailX, point.trailY);
                 drawing = true;
               }
               previous = point;
             }
             if (drawing) {
-              ghostContext.stroke();
+              ghostDrawContext.stroke();
             }
           }
 
           const markerSample = sampleAtOrBefore(samples, baseFrame);
-          const marker = markerSample ? sampleToScreen(markerSample, base, cameraOrigin, jitter) : undefined;
+          const marker = markerSample
+            ? sampleToScreen(markerSample, base, cameraOrigin, jitter)
+            : undefined;
           if (marker) {
-            const inFinding = isFrameInFinding(entry.session, markerSample.frame);
+            const inFinding = isFrameInFinding(
+              entry.session,
+              markerSample.frame,
+            );
+            const label = shouldLabelGhost(entry, overlayIndex, labelMode)
+              ? overlayLabelForEntry(entry)
+              : undefined;
             drawGhostMario(marker.x, marker.y, color, {
               dying: Boolean(markerSample.dying),
               finding: inFinding,
-              opacity
+              opacity,
+              label,
             });
+            if (legendItems.length < 40) {
+              legendItems.push({ entry, color, markerSample });
+            }
             ghostsDrawn += 1;
           }
         }
-        ghostContext.restore();
+        ghostDrawContext.restore();
         ghostOverlay.dataset.ghosts = `${ghostsDrawn}`;
+        renderOverlayLegend(legendItems, ghostsDrawn);
       }
 
       function clearGhostOverlay() {
         ghostContext.clearRect(0, 0, ghostOverlay.width, ghostOverlay.height);
         ghostOverlay.dataset.ghosts = "0";
+        if (!isGridMode()) {
+          singleRenderer.redrawFrame();
+        }
+        renderOverlayLegend([], 0);
+      }
+
+      function renderOverlayLegend(items, totalGhosts) {
+        if (!overlayLegend) {
+          return;
+        }
+
+        if (!isOverlayMode()) {
+          overlayLegend.replaceChildren();
+          return;
+        }
+
+        if (!items.length) {
+          const empty = document.createElement("div");
+          empty.className = "overlay-legend-meta";
+          empty.textContent = totalGhosts
+            ? "No visible legend entries at this frame."
+            : "No overlay ghosts visible at this frame.";
+          overlayLegend.replaceChildren(empty);
+          return;
+        }
+
+        const nodes = items.map(({ entry, color, markerSample }) => {
+          const row = document.createElement("div");
+          row.className = "overlay-legend-item";
+
+          const swatch = document.createElement("span");
+          swatch.className = "overlay-legend-swatch";
+          swatch.style.background = color;
+
+          const text = document.createElement("div");
+          const title = document.createElement("div");
+          title.className = "overlay-legend-title";
+          title.textContent = `${overlayLabelForEntry(entry)} ${entry.session.persona || "episode"}`;
+
+          const meta = document.createElement("div");
+          meta.className = "overlay-legend-meta";
+          const score = Math.round(entry.session.agent?.score ?? 0);
+          const progress = displayProgress(entry);
+          const now = Number.isFinite(markerSample?.progress)
+            ? markerSample.progress
+            : "-";
+          const findings = entry.session.findings?.length ?? 0;
+          meta.textContent = `now ${now} · best ${progress} · score ${score} · bugs ${findings}`;
+
+          text.append(title, meta);
+          row.append(swatch, text);
+          return row;
+        });
+
+        if (totalGhosts > items.length) {
+          const extra = document.createElement("div");
+          extra.className = "overlay-legend-meta";
+          extra.textContent = `Showing ${items.length} legend rows for ${totalGhosts} visible ghosts.`;
+          nodes.push(extra);
+        }
+
+        overlayLegend.replaceChildren(...nodes);
       }
 
       function overlayEntries() {
         const limitValue = overlayLimitSelect.value;
-        const limit = limitValue === "all" ? Number.MAX_SAFE_INTEGER : Number(limitValue) || 100;
+        const limit =
+          limitValue === "all"
+            ? Number.MAX_SAFE_INTEGER
+            : Number(limitValue) || 100;
         return sortedSessions
-          .filter((entry) => Array.isArray(entry.record?.overlaySamples) && entry.record.overlaySamples.length > 0)
+          .filter(
+            (entry) =>
+              Array.isArray(entry.record?.overlaySamples) &&
+              entry.record.overlaySamples.length > 0,
+          )
           .slice(0, limit);
       }
 
       function samplesForTrail(samples, frame, trailLength) {
         const startFrame = Math.max(1, frame - trailLength + 1);
-        return samples.filter((sample) => sample.frame >= startFrame && sample.frame <= frame);
+        return samples.filter(
+          (sample) => sample.frame >= startFrame && sample.frame <= frame,
+        );
+      }
+
+      function visibleOverlaySamples(samples, frame) {
+        if (!Array.isArray(samples) || !samples.length) {
+          return [];
+        }
+
+        const firstDeathIndex = samples.findIndex((sample) => sample.dying);
+        const lastAllowedIndex =
+          firstDeathIndex >= 0 ? firstDeathIndex : samples.length - 1;
+        const lastAllowedFrame = samples[lastAllowedIndex]?.frame ?? 0;
+        if (frame > lastAllowedFrame) {
+          return [];
+        }
+
+        return samples.slice(0, lastAllowedIndex + 1);
       }
 
       function sampleAtOrBefore(samples, frame) {
@@ -1315,14 +2479,31 @@
           x,
           y,
           trailX: x + 8,
-          trailY: y + 12
+          trailY: y + 12,
         };
       }
 
+      function cameraOriginForSnapshot(snapshot) {
+        if (Number.isFinite(snapshot.cameraOrigin)) {
+          return snapshot.cameraOrigin;
+        }
+        if (
+          Number.isFinite(snapshot.currentScreen) &&
+          Number.isFinite(snapshot.screenLeftX)
+        ) {
+          return snapshot.currentScreen * 256 + snapshot.screenLeftX;
+        }
+        return (snapshot.progress || 0) - (snapshot.xOnScreen || 0);
+      }
+
       function sameArea(sample, base) {
-        const hasRawArea = Number.isFinite(sample.rawWorld) && Number.isFinite(sample.rawLevel);
+        const hasRawArea =
+          Number.isFinite(sample.rawWorld) && Number.isFinite(sample.rawLevel);
         if (hasRawArea) {
-          return sample.rawWorld === base.rawWorld && sample.rawLevel === base.rawLevel;
+          return (
+            sample.rawWorld === base.rawWorld &&
+            sample.rawLevel === base.rawLevel
+          );
         }
         return sample.world === base.world && sample.level === base.level;
       }
@@ -1333,40 +2514,87 @@
         const bodyColor = options.dying ? "#ff5a63" : color;
         const overalls = options.dying ? "#4f151d" : "#3676ff";
 
-        ghostContext.save();
-        ghostContext.globalAlpha = options.opacity;
-        ghostContext.fillStyle = hexToRgba("#000000", 0.35);
-        ghostContext.fillRect(px + 2, py + 17, 12, 2);
+        ghostDrawContext.save();
+        ghostDrawContext.globalAlpha = options.opacity;
+        ghostDrawContext.fillStyle = hexToRgba("#000000", 0.35);
+        ghostDrawContext.fillRect(px + 2, py + 17, 12, 2);
 
-        ghostContext.fillStyle = bodyColor;
-        ghostContext.fillRect(px + 3, py, 9, 3);
-        ghostContext.fillRect(px + 5, py - 3, 6, 3);
-        ghostContext.fillStyle = "#ffd19a";
-        ghostContext.fillRect(px + 4, py + 3, 8, 6);
-        ghostContext.fillStyle = bodyColor;
-        ghostContext.fillRect(px + 2, py + 9, 12, 4);
-        ghostContext.fillStyle = overalls;
-        ghostContext.fillRect(px + 3, py + 12, 10, 7);
-        ghostContext.fillStyle = bodyColor;
-        ghostContext.fillRect(px + 2, py + 19, 5, 4);
-        ghostContext.fillRect(px + 9, py + 19, 5, 4);
+        ghostDrawContext.fillStyle = bodyColor;
+        ghostDrawContext.fillRect(px + 3, py, 9, 3);
+        ghostDrawContext.fillRect(px + 5, py - 3, 6, 3);
+        ghostDrawContext.fillStyle = "#ffd19a";
+        ghostDrawContext.fillRect(px + 4, py + 3, 8, 6);
+        ghostDrawContext.fillStyle = bodyColor;
+        ghostDrawContext.fillRect(px + 2, py + 9, 12, 4);
+        ghostDrawContext.fillStyle = overalls;
+        ghostDrawContext.fillRect(px + 3, py + 12, 10, 7);
+        ghostDrawContext.fillStyle = bodyColor;
+        ghostDrawContext.fillRect(px + 2, py + 19, 5, 4);
+        ghostDrawContext.fillRect(px + 9, py + 19, 5, 4);
 
         if (options.finding) {
-          ghostContext.strokeStyle = "#ffffff";
-          ghostContext.lineWidth = 1;
-          ghostContext.strokeRect(px, py - 4, 16, 28);
+          ghostDrawContext.strokeStyle = "#ffffff";
+          ghostDrawContext.lineWidth = 1;
+          ghostDrawContext.strokeRect(px, py - 4, 16, 28);
         }
         if (options.dying) {
-          ghostContext.strokeStyle = "#ffef8a";
-          ghostContext.lineWidth = 1.5;
-          ghostContext.beginPath();
-          ghostContext.moveTo(px, py - 3);
-          ghostContext.lineTo(px + 16, py + 23);
-          ghostContext.moveTo(px + 16, py - 3);
-          ghostContext.lineTo(px, py + 23);
-          ghostContext.stroke();
+          ghostDrawContext.strokeStyle = "#ffef8a";
+          ghostDrawContext.lineWidth = 1.5;
+          ghostDrawContext.beginPath();
+          ghostDrawContext.moveTo(px, py - 3);
+          ghostDrawContext.lineTo(px + 16, py + 23);
+          ghostDrawContext.moveTo(px + 16, py - 3);
+          ghostDrawContext.lineTo(px, py + 23);
+          ghostDrawContext.stroke();
         }
-        ghostContext.restore();
+        if (options.label) {
+          drawGhostLabel(px + 15, py - 7, options.label, options.opacity);
+        }
+        ghostDrawContext.restore();
+      }
+
+      function drawGhostLabel(x, y, label, opacity) {
+        ghostDrawContext.save();
+        ghostDrawContext.globalAlpha = Math.min(1, opacity + 0.18);
+        ghostDrawContext.font = "8px ui-sans-serif, system-ui, sans-serif";
+        ghostDrawContext.textBaseline = "top";
+        const width = Math.ceil(ghostDrawContext.measureText(label).width) + 6;
+        const clampedX = Math.max(1, Math.min(255 - width, Math.round(x)));
+        const clampedY = Math.max(1, Math.min(231, Math.round(y)));
+        ghostDrawContext.fillStyle = hexToRgba("#030405", 0.78);
+        ghostDrawContext.fillRect(clampedX, clampedY, width, 10);
+        ghostDrawContext.strokeStyle = hexToRgba("#ffffff", 0.55);
+        ghostDrawContext.lineWidth = 0.75;
+        ghostDrawContext.strokeRect(
+          clampedX + 0.5,
+          clampedY + 0.5,
+          width - 1,
+          9,
+        );
+        ghostDrawContext.fillStyle = "#ffffff";
+        ghostDrawContext.fillText(label, clampedX + 3, clampedY + 1);
+        ghostDrawContext.restore();
+      }
+
+      function shouldLabelGhost(entry, overlayIndex, mode) {
+        if (mode === "off") {
+          return false;
+        }
+        if (mode === "selected") {
+          return entry.session === currentSession;
+        }
+        if (mode === "all") {
+          return true;
+        }
+        return overlayIndex < 25;
+      }
+
+      function overlayLabelForEntry(entry) {
+        const episode =
+          entry.record?.episode ??
+          entry.session.agent?.episode ??
+          entry.index + 1;
+        return `#${episode}`;
       }
 
       function colorForEpisode(seed) {
@@ -1380,7 +2608,7 @@
         const radius = 0.6 + (value % 5) * 0.38;
         return {
           x: Math.cos(angle) * radius,
-          y: Math.sin(angle) * radius
+          y: Math.sin(angle) * radius,
         };
       }
 
@@ -1389,7 +2617,9 @@
       }
 
       function isFrameInFinding(session, frame) {
-        return (session.findings || []).some((finding) => finding.frameStart <= frame && finding.frameEnd >= frame);
+        return (session.findings || []).some(
+          (finding) => finding.frameStart <= frame && finding.frameEnd >= frame,
+        );
       }
 
       function hslToHex(hue, saturation, lightness) {
@@ -1407,7 +2637,11 @@
         else [r, g, b] = [c, 0, x];
         const m = l - c / 2;
         return `#${[r, g, b]
-          .map((channel) => Math.round((channel + m) * 255).toString(16).padStart(2, "0"))
+          .map((channel) =>
+            Math.round((channel + m) * 255)
+              .toString(16)
+              .padStart(2, "0"),
+          )
           .join("")}`;
       }
 
@@ -1445,18 +2679,30 @@
       }
 
       function selectedGridPlayer() {
-        return gridPlayers.find((player) => player.session === currentSession) || gridPlayers[0];
+        return (
+          gridPlayers.find((player) => player.session === currentSession) ||
+          gridPlayers[0]
+        );
       }
 
-      function shortGridLabel(session, index) {
+      function shortGridLabel(entryOrSession, index) {
+        const session = entryOrSession.session || entryOrSession;
         if (session.agent) {
-          return `#${session.agent.episode ?? index + 1} · score ${session.agent.score ?? 0}`;
+          const adjusted = displayScore(entryOrSession);
+          const rawScore = Number(session.agent.score ?? 0);
+          const score =
+            session.metrics?.deaths > 0 &&
+            Math.round(adjusted) !== Math.round(rawScore)
+              ? `${Math.round(adjusted)} raw ${rawScore}`
+              : `${rawScore}`;
+          return `#${session.agent.episode ?? index + 1} · score ${score}`;
         }
         return `${index + 1}. ${session.persona || "session"}`;
       }
 
-      function gridMeta(session) {
-        const progress = session.metrics?.maxProgress ?? 0;
+      function gridMeta(entryOrSession) {
+        const session = entryOrSession.session || entryOrSession;
+        const progress = displayProgress(entryOrSession);
         const findings = session.findings?.length ?? 0;
         const bugScore = session.agent?.bugScore ?? 0;
         const coverageScore = session.agent?.coverageScore ?? 0;
@@ -1464,34 +2710,229 @@
         const goals = new Set(session.agent?.coverageGoalsHit || []).size;
         const gameScore = session.agent?.gameScoreDelta ?? 0;
         const rooms = session.agent?.roomTransitions ?? 0;
-        const parent = session.agent?.parentId ? ` · parent ${session.agent.parentId}` : "";
-        return `progress ${progress} · ${Math.round((session.metrics?.frames || 0) / 60)}s · route ${Math.round(routeScore)} · game +${gameScore} · rooms ${rooms} · bugs ${findings} · coverage ${coverageScore}/${goals}${parent}`;
+        const phase = session.agent?.phase ? ` · ${session.agent.phase}` : "";
+        const parent = session.agent?.parentId
+          ? ` · parent ${session.agent.parentId}`
+          : "";
+        return `progress ${progress} · ${Math.round((session.metrics?.frames || 0) / 60)}s · route ${Math.round(routeScore)} · game +${gameScore} · rooms ${rooms} · bugs ${findings} · coverage ${coverageScore}/${goals}${phase}${parent}`;
       }
 
       function fastestMilestoneFrame(session) {
-        const frames = Object.values(session.agent?.milestoneFrames || {}).filter((frame) => Number.isFinite(frame));
+        const frames = Object.values(
+          session.agent?.milestoneFrames || {},
+        ).filter((frame) => Number.isFinite(frame));
         return frames.length ? Math.min(...frames) : Number.MAX_SAFE_INTEGER;
+      }
+
+      function displayProgress(entryOrSession) {
+        const session = entryOrSession.session || entryOrSession;
+        const record = entryOrSession.record;
+        const metricProgress = session.metrics?.maxProgress ?? 0;
+        const agentProgress = Math.max(
+          session.agent?.progressDelta ?? 0,
+          session.agent?.obstacleProgress ?? 0,
+          progressFromMilestones(session.agent?.milestoneFrames || {}),
+        );
+        const overlayProgress = Array.isArray(record?.overlaySamples)
+          ? record.overlaySamples.reduce((max, sample) => {
+              const progress = Number.isFinite(sample.progress)
+                ? sample.progress
+                : 0;
+              return Math.max(max, progress);
+            }, 0)
+          : 0;
+        return Math.max(metricProgress, agentProgress, overlayProgress);
+      }
+
+      function displayScore(entryOrSession) {
+        const session = entryOrSession.session || entryOrSession;
+        const rawScore = Number(session.agent?.score ?? 0);
+        if (!session.metrics || (session.metrics.deaths ?? 0) <= 0) {
+          return rawScore;
+        }
+
+        const findings = session.findings || [];
+        const bugScore = Number(session.agent?.bugScore ?? 0);
+        const meaningfulBug =
+          bugScore >= 100 ||
+          findings.some(
+            (finding) =>
+              finding.severity === "high" ||
+              finding.type === "emulator-error" ||
+              finding.type === "impossible-transition" ||
+              finding.type === "wrong-warp-candidate",
+          );
+        const progress = displayProgress(entryOrSession);
+        if (meaningfulBug) {
+          return Math.max(
+            0,
+            Math.min(
+              rawScore * 0.58 - session.metrics.deaths * 140,
+              progress * 1.1 + bugScore * 4 + 700,
+            ),
+          );
+        }
+
+        return Math.max(
+          0,
+          Math.min(
+            rawScore * 0.22 - session.metrics.deaths * 360,
+            progress * 0.55 + 380,
+          ),
+        );
+      }
+
+      function progressFromMilestones(milestoneFrames) {
+        let progress = 0;
+        for (const key of Object.keys(milestoneFrames)) {
+          const match = /^progress-(\d+)$/.exec(key);
+          if (match) {
+            progress = Math.max(progress, Number(match[1]) || 0);
+          }
+        }
+        return progress;
       }
 
       function readSnapshot(emulator) {
         const memory = emulator && emulator.cpu && emulator.cpu.mem;
         if (!memory) {
-          return { rawWorld: 0, rawLevel: 0, world: 0, level: 0, currentScreen: 0, xOnScreen: 0, progress: 0 };
+          return {
+            rawWorld: 0,
+            rawLevel: 0,
+            world: 0,
+            level: 0,
+            playerState: 0,
+            playerStateName: "unknown",
+            currentScreen: 0,
+            nextScreen: 0,
+            screenLeftX: 0,
+            cameraOrigin: 0,
+            xOnScreen: 0,
+            yOnScreen: 0,
+            levelPage: 0,
+            progress: 0,
+            horizontalSpeed: 0,
+            horizontalSpeedAbs: 0,
+            verticalVelocity: 0,
+            lives: 0,
+            coins: 0,
+            score: 0,
+            gameTimer: 0,
+            gameMode: 0,
+            levelLoading: 0,
+            levelEntry: 0,
+            scrollLock: 0,
+            scrollAmount: 0,
+            areaOffset: 0,
+            areaMusic: 0,
+            playerCollisionBits: 0xff,
+            enemyCollisionBits: 0,
+            playerHitDetectFlag: 0,
+            warpZoneControl: 0,
+            changeAreaTimer: 0,
+            enemyTypes: [],
+            vineTileCount: 0,
+            pipeTileCount: 0,
+            hiddenBlockTileCount: 0,
+            onVine: false,
+            enteringPipe: false,
+            dying: false,
+            vineVisible: false,
+            warpZoneVisible: false,
+            pipeInteraction: false,
+            roomId: "unknown",
+          };
         }
+        const enemyTypes = readBytes(memory, SMB_RAM.enemyTypes, 5);
+        const playerState = readByte(memory, SMB_RAM.playerState);
+        const soundEffect2 = readByte(memory, SMB_RAM.soundEffect2);
+        const soundEffect3 = readByte(memory, SMB_RAM.soundEffect3);
+        const eventMusic = readByte(memory, SMB_RAM.eventMusic);
+        const deathMusicLoaded = readByte(memory, SMB_RAM.deathMusicLoaded);
         const currentScreen = readByte(memory, SMB_RAM.currentScreen);
         const levelPage = readByte(memory, SMB_RAM.levelPage);
         const xOnScreen = readByte(memory, SMB_RAM.xOnScreen);
         const rawWorld = readByte(memory, SMB_RAM.world);
         const rawLevel = readByte(memory, SMB_RAM.level);
+        const vineTileCount = countTiles(memory, VINE_TILES);
+        const pipeTileCount = countTiles(memory, PIPE_TILES);
+        const hiddenBlockTileCount = countTiles(memory, HIDDEN_BLOCK_TILES);
+        const warpZoneControl = readByte(memory, SMB_RAM.warpZoneControl);
+        const changeAreaTimer = readByte(memory, SMB_RAM.changeAreaTimer);
+        const onVine = playerState === 0x01;
+        const enteringPipe =
+          playerState === 0x02 ||
+          playerState === 0x03 ||
+          (soundEffect3 & 0x10) !== 0;
+        const dying =
+          playerState === 0x06 ||
+          playerState === 0x0b ||
+          deathMusicLoaded !== 0 ||
+          (eventMusic & 0x01) !== 0;
+        const vineVisible =
+          onVine ||
+          enemyTypes.includes(0x2f) ||
+          (soundEffect2 & 0x04) !== 0 ||
+          vineTileCount > 0;
+        const warpZoneVisible =
+          enemyTypes.includes(0x34) || warpZoneControl !== 0;
+        const pipeInteraction =
+          enteringPipe || changeAreaTimer !== 0 || pipeTileCount > 0;
+        const areaOffset = readByte(memory, SMB_RAM.areaOffset);
+        const areaMusic = readByte(memory, SMB_RAM.areaMusic);
+        const levelEntry = readByte(memory, SMB_RAM.levelEntry);
         return {
           rawWorld,
           rawLevel,
           world: rawWorld + 1,
           level: rawLevel + 1,
+          playerState,
+          playerStateName:
+            PLAYER_STATES.get(playerState) || `unknown-${playerState}`,
           currentScreen,
+          nextScreen: readByte(memory, SMB_RAM.nextScreen),
+          screenLeftX: readByte(memory, SMB_RAM.screenLeftX),
+          cameraOrigin:
+            currentScreen * 256 + readByte(memory, SMB_RAM.screenLeftX),
           levelPage,
           xOnScreen,
-          progress: levelPage * 256 + xOnScreen
+          yOnScreen: readByte(memory, SMB_RAM.yOnScreen),
+          progress: levelPage * 256 + xOnScreen,
+          horizontalSpeed: toSignedByte(
+            readByte(memory, SMB_RAM.horizontalSpeed),
+          ),
+          horizontalSpeedAbs: readByte(memory, SMB_RAM.horizontalSpeedAbs),
+          verticalVelocity: toSignedByte(
+            readByte(memory, SMB_RAM.verticalVelocity),
+          ),
+          lives: readByte(memory, SMB_RAM.lives),
+          coins: readByte(memory, SMB_RAM.preLevel),
+          score: readScore(memory),
+          gameTimer: readGameTimer(memory),
+          gameMode: readByte(memory, SMB_RAM.gameMode),
+          levelLoading: readByte(memory, SMB_RAM.levelLoading),
+          levelEntry,
+          scrollLock: readByte(memory, SMB_RAM.scrollLock),
+          scrollAmount: readByte(memory, SMB_RAM.scrollAmount),
+          areaOffset,
+          areaMusic,
+          eventMusic,
+          playerCollisionBits: readByte(memory, SMB_RAM.playerCollisionBits),
+          enemyCollisionBits: readByte(memory, SMB_RAM.enemyCollisionBits),
+          playerHitDetectFlag: readByte(memory, SMB_RAM.playerHitDetectFlag),
+          warpZoneControl,
+          changeAreaTimer,
+          enemyTypes,
+          vineTileCount,
+          pipeTileCount,
+          hiddenBlockTileCount,
+          onVine,
+          enteringPipe,
+          dying,
+          vineVisible,
+          warpZoneVisible,
+          pipeInteraction,
+          roomId: `w${rawWorld + 1}-${rawLevel + 1}|a${areaOffset}|m${areaMusic}|e${levelEntry}`,
         };
       }
 
@@ -1499,12 +2940,71 @@
         return memory[address & 0x07ff] || 0;
       }
 
+      function readBytes(memory, address, length) {
+        return Array.from({ length }, (_, offset) =>
+          readByte(memory, address + offset),
+        );
+      }
+
+      function countTiles(memory, tileSet) {
+        let count = 0;
+        for (
+          let address = SMB_RAM.tileBase;
+          address <= SMB_RAM.tileEnd;
+          address += 1
+        ) {
+          if (tileSet.has(readByte(memory, address))) {
+            count += 1;
+          }
+        }
+        return count;
+      }
+
+      function readGameTimer(memory) {
+        return (
+          digit(readByte(memory, SMB_RAM.gameTimerHundreds)) * 100 +
+          digit(readByte(memory, SMB_RAM.gameTimerTens)) * 10 +
+          digit(readByte(memory, SMB_RAM.gameTimerOnes))
+        );
+      }
+
+      function readScore(memory) {
+        const placeValues = [1000000, 100000, 10000, 1000, 100, 10];
+        return placeValues.reduce(
+          (score, placeValue, offset) =>
+            score +
+            digit(readByte(memory, SMB_RAM.scoreStart + offset)) * placeValue,
+          0,
+        );
+      }
+
+      function digit(value) {
+        return value & 0x0f;
+      }
+
+      function toSignedByte(value) {
+        return value >= 0x80 ? value - 0x100 : value;
+      }
+
+      function hexByte(value) {
+        if (!Number.isFinite(value)) {
+          return "--";
+        }
+        return `0x${(value & 0xff).toString(16).padStart(2, "0")}`;
+      }
+
       function maxReplayFrame(inputs) {
-        return inputs.reduce((maxFrame, range) => Math.max(maxFrame, range.frameEnd || 0), 0);
+        return inputs.reduce(
+          (maxFrame, range) => Math.max(maxFrame, range.frameEnd || 0),
+          0,
+        );
       }
 
       function maxVisibleGridFrame() {
-        return gridPlayers.reduce((maxFrame, player) => Math.max(maxFrame, player.totalFrames), 0);
+        return gridPlayers.reduce(
+          (maxFrame, player) => Math.max(maxFrame, player.totalFrames),
+          0,
+        );
       }
 
       function gridSize() {
@@ -1515,7 +3015,9 @@
         if (sortedSessions.length === 0) {
           return 0;
         }
-        return Math.floor((sortedSessions.length - 1) / gridSize()) * gridSize();
+        return (
+          Math.floor((sortedSessions.length - 1) / gridSize()) * gridSize()
+        );
       }
 
       function isGridMode() {

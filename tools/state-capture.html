@@ -3,12 +3,17 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>PlaytestIQ SMB 4-2 State Capture</title>
+    <title>checkpoint SMB 4-2 State Capture</title>
     <style>
       :root {
         color-scheme: dark;
         font-family:
-          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
           sans-serif;
         background: #111318;
         color: #eef1f5;
@@ -148,7 +153,7 @@
   </head>
   <body>
     <main>
-      <h1>PlaytestIQ SMB 4-2 State Capture</h1>
+      <h1>checkpoint SMB 4-2 State Capture</h1>
       <p>
         Load your own Super Mario Bros. ROM, play to World 4-2, then export a
         JSNES save state for the CLI demo. The ROM stays local to this browser.
@@ -186,12 +191,16 @@
       <div id="nes"></div>
       <section class="panel">
         <p>
-          Default JSNES controls are keyboard-based. If your browser does not focus the
-          game immediately, click the emulator and use the keyboard.
+          Default JSNES controls are keyboard-based. If your browser does not
+          focus the game immediately, click the emulator and use the keyboard.
         </p>
         <p>
-          Export is intentionally gated to World 4-2. After download, validate it with
-          <code>node dist\cli.js validate-state --rom .\roms\smb.nes --state .\states\world-4-2.state.json</code>.
+          Export is intentionally gated to World 4-2. After download, validate
+          it with
+          <code
+            >node dist\cli.js validate-state --rom .\roms\smb.nes --state
+            .\states\world-4-2.state.json</code
+          >.
         </p>
       </section>
     </aside>
@@ -205,7 +214,7 @@
         world: 0x075f,
         level: 0x0760,
         gameMode: 0x0770,
-        levelLoading: 0x0772
+        levelLoading: 0x0772,
       };
 
       const PLAYER_STATES = new Map([
@@ -221,7 +230,7 @@
         [0x09, "small-to-large"],
         [0x0a, "large-to-small"],
         [0x0b, "dying"],
-        [0x0c, "to-fire-mario"]
+        [0x0c, "to-fire-mario"],
       ]);
 
       const romFile = document.getElementById("romFile");
@@ -234,7 +243,7 @@
         gameMode: document.getElementById("gameMode"),
         playerState: document.getElementById("playerState"),
         progress: document.getElementById("progress"),
-        ready: document.getElementById("ready")
+        ready: document.getElementById("ready"),
       };
 
       let browser;
@@ -258,14 +267,15 @@
 
       exportButton.addEventListener("click", () => {
         if (!browser || !isWorld42(readSnapshot())) {
-          status.textContent = "Export is available only after the emulator reaches World 4-2.";
+          status.textContent =
+            "Export is available only after the emulator reaches World 4-2.";
           status.className = "warn";
           return;
         }
 
         const state = browser.nes.toJSON();
         const blob = new Blob([JSON.stringify(state, null, 2) + "\n"], {
-          type: "application/json"
+          type: "application/json",
         });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
@@ -286,11 +296,12 @@
           onError: (error) => {
             status.textContent = error.message || String(error);
             status.className = "bad";
-          }
+          },
         });
         browser.loadROM(new Uint8Array(data));
         resetButton.disabled = false;
-        status.textContent = "ROM loaded. Play to World 4-2, then download the save state.";
+        status.textContent =
+          "ROM loaded. Play to World 4-2, then download the save state.";
         status.className = "";
         requestAnimationFrame(updateTelemetry);
       }
@@ -315,7 +326,8 @@
       }
 
       function readSnapshot() {
-        const memory = browser && browser.nes && browser.nes.cpu && browser.nes.cpu.mem;
+        const memory =
+          browser && browser.nes && browser.nes.cpu && browser.nes.cpu.mem;
         if (!memory) {
           return {
             world: 0,
@@ -323,7 +335,7 @@
             gameMode: 0,
             playerState: 0,
             playerStateName: "unloaded",
-            progress: 0
+            progress: 0,
           };
         }
 
@@ -336,9 +348,10 @@
           level: readByte(memory, SMB_RAM.level) + 1,
           gameMode: readByte(memory, SMB_RAM.gameMode),
           playerState,
-          playerStateName: PLAYER_STATES.get(playerState) || `unknown-${playerState}`,
+          playerStateName:
+            PLAYER_STATES.get(playerState) || `unknown-${playerState}`,
           progress: currentScreen * 256 + xOnScreen,
-          levelLoading: readByte(memory, SMB_RAM.levelLoading)
+          levelLoading: readByte(memory, SMB_RAM.levelLoading),
         };
       }
 

@@ -37,6 +37,7 @@ import {
   upsertArchiveCheckpoint,
   VINE_WARP_TARGET_PROGRESS,
   WallClipProbeController,
+  WallClipTrickController,
   WarpZoneProbeController,
   type ArchiveCheckpointInput,
   type ArchiveEntry,
@@ -179,13 +180,14 @@ describe("coverage-guided discovery", () => {
     );
   });
 
-  it("thins overlay samples while preserving findings and deaths", () => {
+  it("thins overlay samples while preserving findings and stopping at death", () => {
     const samples = Array.from({ length: 12 }, (_, index) => frameSample(index + 1, { progress: index * 10 }));
     samples[10] = frameSample(11, { progress: 110, dying: true });
     const overlays = createOverlaySamples(samples, [finding("wall-clip-risk", "medium", 6, 7)]);
 
-    expect(overlays.map((sample) => sample.frame)).toEqual([1, 4, 6, 7, 8, 11, 12]);
+    expect(overlays.map((sample) => sample.frame)).toEqual([1, 4, 6, 7, 8, 11]);
     expect(overlays.find((sample) => sample.frame === 11)?.dying).toBe(true);
+    expect(overlays.find((sample) => sample.frame === 12)).toBeUndefined();
     expect(overlays[0]).toMatchObject({ rawLevel: 1, currentScreen: 2, x: 80, y: 170 });
   });
 
@@ -252,6 +254,41 @@ describe("coverage-guided discovery", () => {
     const goals = ["hidden-vine", "upper-block-route", "progress-05"];
 
     expect(scoreCoverageGoals(goals, [])).toBeGreaterThan(scoreCoverageGoals(goals, goals));
+  });
+
+  it("does not let dead no-bug runs outrank meaningful survivors on score alone", () => {
+    const deadHighCoverage = scoreDiscoveryEpisode(
+      {
+        metrics: { frames: 1892, gameSeconds: 31.53, maxProgress: 1636, deaths: 1, stalls: 0, transitions: 0 },
+        coverage: [],
+        findings: []
+      },
+      new Set(Array.from({ length: 119 }, (_, index) => `cell-${index}`)),
+      102,
+      0,
+      {
+        coverageScore: 1544,
+        speedScore: 202.83,
+        roomScore: 144,
+        gameScore: 83.33,
+        startProgress: 104,
+        targetReached: true
+      }
+    );
+    const survivor = scoreDiscoveryEpisode(
+      {
+        metrics: { frames: 2400, gameSeconds: 40, maxProgress: 1000, deaths: 0, stalls: 0, transitions: 0 },
+        coverage: ["pipe-tiles"],
+        findings: []
+      },
+      new Set(["a", "b", "c", "d"]),
+      4,
+      0,
+      { coverageScore: 120, speedScore: 80, roomScore: 24 }
+    );
+
+    expect(deadHighCoverage).toBeLessThan(1000);
+    expect(deadHighCoverage).toBeLessThan(survivor);
   });
 
   it("rewards faster milestone arrival over slow equivalent progress", () => {
@@ -433,6 +470,44 @@ describe("coverage-guided discovery", () => {
     expect(wallButtons.size).toBeGreaterThan(1);
   });
 
+  it("uses a deterministic 4-2 wall-clip trick sequence near pipe geometry", () => {
+    const controller = new WallClipTrickController(createSeededRandom(17), createRouteSeedControllerConfig(1));
+
+    expect(
+      controller.buttons(1, snapshot({ progress: 40, pipeInteraction: false, pipeTileCount: 0, warpZoneVisible: false }), 1200)
+    ).toEqual(["B", "RIGHT"]);
+    expect(controller.buttons(40, snapshot({ progress: 320, pipeInteraction: false, pipeTileCount: 0, warpZoneVisible: false }), 1200)).toEqual([
+      "A",
+      "B",
+      "RIGHT"
+    ]);
+
+    const trickButtons = new Set<string>();
+    for (let frame = 1; frame <= 110; frame += 1) {
+      trickButtons.add(
+        controller
+          .buttons(
+            frame,
+            snapshot({
+              progress: 640,
+              pipeInteraction: true,
+              pipeTileCount: 2,
+              scrollLock: 1,
+              playerCollisionBits: 0xfb,
+              horizontalSpeedAbs: 16,
+              warpZoneVisible: false
+            }),
+            1200
+          )
+          .join("+")
+      );
+    }
+
+    expect([...trickButtons]).toEqual(
+      expect.arrayContaining(["B+RIGHT", "RIGHT", "B", "B+LEFT", "B+DOWN+RIGHT", "A+B+RIGHT", "A+RIGHT"])
+    );
+  });
+
   it("uses RAM-reactive coverage exploration for missing route goals", () => {
     const upperController = new CoverageGoalController(createSeededRandom(5), createRouteSeedControllerConfig(1), [
       "upper-block-route",
@@ -459,6 +534,17 @@ describe("coverage-guided discovery", () => {
 
     expect(saved).toContain(bug);
     expect(saved).toContain(progress);
+  });
+
+  it("keeps a Go-Explore bug phase representative for hybrid balanced output", () => {
+    const rlBest = session({ score: 500, bugScore: 0, progressScore: 500, maxProgress: 900, phase: "rl-explore" });
+    const rlSecond = session({ score: 450, bugScore: 0, progressScore: 450, maxProgress: 850, phase: "rl-explore" });
+    const bugPhase = session({ score: 40, bugScore: 0, progressScore: 40, maxProgress: 300, phase: "go-explore-bug" });
+
+    const saved = selectSavedDiscoverySessions([rlBest, rlSecond, bugPhase], 2, "balanced");
+
+    expect(saved).toContain(rlBest);
+    expect(saved).toContain(bugPhase);
   });
 
   it("saves coverage-diverse sessions in coverage focus", () => {
@@ -674,6 +760,7 @@ function session(options: {
   gameScoreDelta?: number;
   roomTransitions?: number;
   obstacleFrame?: number;
+  phase?: "rl-explore" | "go-explore-bug";
 }): SessionResult {
   return {
     persona: "coverage-explorer",
@@ -713,6 +800,7 @@ function session(options: {
       obstacleProgress: options.obstacleFrame === undefined ? undefined : options.maxProgress,
       obstacleDurationFrames: options.obstacleFrame === undefined ? undefined : 60,
       obstacleReason: options.obstacleFrame === undefined ? undefined : "forward-input-blocked-by-geometry",
+      phase: options.phase,
       mutation: "test"
     }
   };

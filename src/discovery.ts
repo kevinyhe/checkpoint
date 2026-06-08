@@ -39,7 +39,7 @@ export const MACRO_ACTIONS = [
   "climb-right"
 ] as const;
 
-export const DEFAULT_DISCOVERY_STRATEGY: DiscoveryStrategy = "full-run-evolution";
+export const DEFAULT_DISCOVERY_STRATEGY: DiscoveryStrategy = "rl-go-explore";
 export const DEFAULT_CHECKPOINT_LIMIT = 160;
 export const DEFAULT_DISCOVERY_FOCUS: DiscoveryFocus = "balanced";
 export const DEFAULT_BUG_TARGET: BugTarget = "all";
@@ -80,6 +80,10 @@ const SUB_AREA_FRONTIER_JUMP_ON_FRAMES = 18;
 const SUB_AREA_FRONTIER_JUMP_PERIOD_FRAMES = 45;
 const FULL_RUN_ROUTE_SEED_EPISODES = 6;
 const FULL_RUN_FRESH_EXPLORATION_RATE = 0.04;
+const RL_EXPLORE_FRACTION = 0.58;
+const RL_CHECKPOINT_BUDGET = 64;
+const RL_ACTION_MIN_FRAMES = 8;
+const RL_ACTION_MAX_FRAMES = 42;
 
 export type MacroActionName = (typeof MACRO_ACTIONS)[number];
 
@@ -226,7 +230,13 @@ interface GoExploreEpisodeResult {
   checkpoints: ArchiveCheckpointInput[];
 }
 
-type GoExploreControlMode = "route-seed" | "action-fuzz" | "warp-zone-probe" | "wall-clip-probe" | "coverage-explore";
+type GoExploreControlMode =
+  | "route-seed"
+  | "action-fuzz"
+  | "warp-zone-probe"
+  | "wall-clip-probe"
+  | "wall-clip-trick"
+  | "coverage-explore";
 
 interface CapturedCheckpoint {
   checkpoint: ArchiveCheckpointInput;
@@ -285,6 +295,9 @@ export async function runDiscovery(options: DiscoverOptions): Promise<RunResult>
 }
 
 export async function runDiscoveryShard(options: DiscoveryShardOptions): Promise<DiscoveryShardResult> {
+  if (options.strategy === "rl-go-explore") {
+    return runRlGoExploreDiscoveryShard(options);
+  }
   if (options.strategy === "trace-mutation") {
     return runTraceMutationDiscoveryShard(options);
   }
@@ -360,7 +373,7 @@ async function runGoExploreDiscoveryShard(options: DiscoveryShardOptions): Promi
     parent.visits += 1;
     const controlMode = chooseGoExploreControlMode(parent, random, bestProgress, options.focus, options.bugTarget);
     const mutation =
-      controlMode === "warp-zone-probe" || controlMode === "wall-clip-probe"
+      controlMode === "warp-zone-probe" || controlMode === "wall-clip-probe" || controlMode === "wall-clip-trick"
         ? { config: parent.controllerConfig, mutation: controlMode }
         : createProgressMutation(parent.controllerConfig, random, parent.progress, bestProgress);
     const globalEpisode = options.episodeOffset + episode;
@@ -520,6 +533,7 @@ function executeGoExploreEpisode(options: {
   });
 
   const session = sessionFromExecution("coverage-explorer", execution);
+  session.metrics.maxProgress = Math.max(session.metrics.maxProgress, options.parent.progress, options.parent.bestProgress);
   const cells = new Set(execution.samples.map(createArchiveCell));
   const newCells = countNewCells(cells, options.globalCells);
   const coverageGoalsHit = [...collectCoverageGoals(execution.samples)].sort();
@@ -973,6 +987,226 @@ async function runFullRunEvolutionDiscoveryShard(options: DiscoveryShardOptions)
   };
 }
 
+async function runRlGoExploreDiscoveryShard(options: DiscoveryShardOptions): Promise<DiscoveryShardResult> {
+  const durationFrames = options.episodeDurationSeconds * 60;
+  const inputs = await loadInputs(options.romPath, options.statePath);
+  const random = createSeededRandom(options.seed);
+  const globalCells = new Set<string>();
+  const globalCoverageGoals = new Set<string>();
+  const archive = new Map<string, ArchiveEntry>();
+  const allEpisodes: DiscoveryEpisode[] = [];
+  const rlPolicy = new TabularRlPolicy();
+  const startedAt = Date.now();
+  const episodeLog = await initializeEpisodeLog(options);
+  const rlEpisodeCount = Math.max(1, Math.min(options.episodes, Math.ceil(options.episodes * RL_EXPLORE_FRACTION)));
+  let checkpointSequence = 0;
+  let bestProgress = 0;
+
+  const initialController = progressBiasedConfig(createRouteSeedControllerConfig(options.seed));
+  const initialEntry = createInitialArchiveEntry(inputs, initialController, options.workerIndex);
+  upsertArchiveCheckpoint(archive, { ...initialEntry, novelty: 1 }, options.checkpointLimit);
+  globalCells.add(initialEntry.cell);
+
+  for (let episode = 1; episode <= rlEpisodeCount; episode += 1) {
+    if (options.focus === "coverage" && summarizeWorld42CoverageGoals(globalCoverageGoals).complete) {
+      break;
+    }
+
+    const globalEpisode = options.episodeOffset + episode;
+    const epsilon = rlExplorationRate(episode, rlEpisodeCount, options.focus);
+    const controller = new RlExplorationController(
+      rlPolicy,
+      createSeededRandom(options.seed + globalEpisode * 3571),
+      epsilon,
+      options.focus
+    );
+    const checkpoints: CapturedCheckpoint[] = [];
+    const seenCheckpointKeys = new Set<string>();
+    let previousSample: FrameSample | undefined;
+
+    const execution = executeEpisode({
+      romData: inputs.romData,
+      stateData: inputs.stateData,
+      durationFrames,
+      stopOnDeath: true,
+      selectButtons: (frame, snapshot) => controller.buttons(frame, snapshot, durationFrames),
+      onSample: (context) => {
+        const reason = checkpointReason(context.sample, previousSample, 0, seenCheckpointKeys);
+        previousSample = context.sample;
+        if (!reason) {
+          return;
+        }
+
+        const cell = createArchiveCell(context.sample);
+        const priority = scoreCheckpointCaptureCandidate(context.sample, reason, 0) + Math.min(80, sampleBugPotential(context.sample) * 2);
+        const replaceIndex = checkpointReplacementIndex(checkpoints, priority, Math.min(options.checkpointLimit, RL_CHECKPOINT_BUDGET));
+        if (replaceIndex === undefined) {
+          return;
+        }
+
+        const checkpoint: CapturedCheckpoint = {
+          priority,
+          checkpoint: {
+            id: `rl_cell_w${options.workerIndex}_${checkpointSequence += 1}`,
+            cell,
+            stateData: context.captureState(),
+            replayInputs: context.replayInputs(),
+            frame: context.globalFrame,
+            progress: context.sample.progress,
+            bestProgress: Math.max(bestProgress, context.sample.progress),
+            novelty: globalCells.has(cell) ? 0 : 1,
+            bugScore: sampleBugPotential(context.sample),
+            coverageGoals: [...classifyWorld42CoverageGoals(context.sample)],
+            depth: 1,
+            targetReached: reachedVineWarpTarget(context.sample),
+            reason: `rl-${reason}`,
+            controllerConfig: initialController
+          }
+        };
+
+        if (replaceIndex === checkpoints.length) {
+          checkpoints.push(checkpoint);
+        } else {
+          checkpoints[replaceIndex] = checkpoint;
+        }
+      }
+    });
+    controller.finish(execution.samples.at(-1));
+
+    const id = `episode_${globalEpisode}`;
+    const result = createRlDiscoveryEpisode({
+      id,
+      globalEpisode,
+      phase: "rl-explore",
+      mutation: `rl-explore-epsilon-${epsilon.toFixed(2)}`,
+      parentId: undefined,
+      execution,
+      globalCells,
+      globalCoverageGoals,
+      focus: options.focus,
+      bugTarget: options.bugTarget,
+      rlEpsilon: epsilon,
+      rlStateCount: rlPolicy.stateCount,
+      rlUpdateCount: rlPolicy.updateCount
+    });
+
+    allEpisodes.push(result);
+    episodeLog.records += await appendDiscoveryEpisodeLog(episodeLog.path, result);
+    bestProgress = Math.max(bestProgress, result.session.metrics.maxProgress);
+    for (const cell of result.cells) {
+      globalCells.add(cell);
+    }
+    for (const goal of result.coverageGoalsHit) {
+      globalCoverageGoals.add(goal);
+    }
+    for (const candidate of checkpoints) {
+      candidate.checkpoint.bestProgress = Math.max(candidate.checkpoint.bestProgress, bestProgress);
+      if (upsertArchiveCheckpoint(archive, candidate.checkpoint, options.checkpointLimit)) {
+        globalCells.add(candidate.checkpoint.cell);
+      }
+    }
+
+    options.onProgress?.({
+      type: "episode",
+      episode: globalEpisode,
+      episodes: options.episodeOffset + options.episodes,
+      workerIndex: options.workerIndex,
+      workers: options.workers,
+      score: result.score,
+      newCells: result.newCells,
+      findings: result.session.findings.length,
+      bestScore: Math.max(...allEpisodes.map((candidate) => candidate.score)),
+      elapsedMs: Date.now() - startedAt
+    });
+  }
+
+  for (let localEpisode = rlEpisodeCount + 1; localEpisode <= options.episodes; localEpisode += 1) {
+    const globalEpisode = options.episodeOffset + localEpisode;
+    const coverageSummary = summarizeWorld42CoverageGoals(globalCoverageGoals);
+    const bugFocus: DiscoveryFocus = options.focus === "progress" ? "balanced" : "bugs";
+    const parent =
+      chooseDiscoveryParent([...archive.values()], random, bestProgress, bugFocus, options.bugTarget, coverageSummary) ?? initialEntry;
+    parent.visits += 1;
+    const controlMode = chooseGoExploreControlMode(parent, random, bestProgress, bugFocus, options.bugTarget);
+    const mutation =
+      controlMode === "warp-zone-probe" || controlMode === "wall-clip-probe" || controlMode === "wall-clip-trick"
+        ? { config: parent.controllerConfig, mutation: controlMode }
+        : createProgressMutation(parent.controllerConfig, random, parent.progress, bestProgress);
+    const result = executeGoExploreEpisode({
+      id: `episode_${globalEpisode}`,
+      globalEpisode,
+      parent,
+      controllerConfig: mutation.config,
+      mutation: `rl-handoff-${formatMutationLabel(mutation.mutation, controlMode)}`,
+      controlMode,
+      randomSeed: options.seed + globalEpisode * 7919,
+      durationFrames,
+      inputs,
+      globalCells,
+      globalCoverageGoals,
+      checkpointId: () => `rl_bug_cell_w${options.workerIndex}_${checkpointSequence += 1}`,
+      focus: options.focus,
+      bugTarget: options.bugTarget,
+      checkpointBudget: Math.min(options.checkpointLimit, EPISODE_CHECKPOINT_BUDGET)
+    });
+    result.episode.session.agent = {
+      ...result.episode.session.agent!,
+      type: "rl-go-explore-hybrid",
+      phase: "go-explore-bug"
+    };
+
+    allEpisodes.push(result.episode);
+    episodeLog.records += await appendDiscoveryEpisodeLog(episodeLog.path, result.episode);
+    updateArchiveParentOutcome(parent, result.episode.session);
+    bestProgress = Math.max(bestProgress, result.episode.session.metrics.maxProgress);
+    for (const goal of result.episode.coverageGoalsHit) {
+      globalCoverageGoals.add(goal);
+    }
+    for (const checkpoint of result.checkpoints) {
+      checkpoint.novelty = globalCells.has(checkpoint.cell) ? 0 : 1;
+      if (upsertArchiveCheckpoint(archive, checkpoint, options.checkpointLimit)) {
+        globalCells.add(checkpoint.cell);
+      }
+    }
+
+    options.onProgress?.({
+      type: "episode",
+      episode: globalEpisode,
+      episodes: options.episodeOffset + options.episodes,
+      workerIndex: options.workerIndex,
+      workers: options.workers,
+      score: result.episode.score,
+      newCells: result.episode.newCells,
+      findings: result.episode.session.findings.length,
+      bestScore: Math.max(...allEpisodes.map((candidate) => candidate.score)),
+      elapsedMs: Date.now() - startedAt
+    });
+  }
+
+  const topEpisodes = selectTopEpisodes(allEpisodes, options.top, options.focus);
+
+  return {
+    result: createDiscoveryRunResult({
+      inputs,
+      options,
+      agentType: "rl-go-explore-hybrid",
+      globalCells,
+      allEpisodes,
+      topEpisodes,
+      corpusSize: rlPolicy.stateCount,
+      checkpointCount: archive.size,
+      episodeLogRecords: episodeLog.records,
+      globalCoverageGoals
+    }),
+    cells: [...globalCells],
+    corpusSize: rlPolicy.stateCount,
+    checkpointCount: archive.size,
+    episodeLogRecords: episodeLog.records,
+    episodeLogPath: episodeLog.path,
+    coverageGoals: [...globalCoverageGoals]
+  };
+}
+
 async function runDiscoveryWorkers(options: NormalizedDiscoveryOptions): Promise<DiscoveryShardResult[]> {
   const startedAt = Date.now();
   const episodeCounts = distributeEpisodes(options.episodes, options.workers);
@@ -1101,7 +1335,9 @@ function mergeDiscoveryShards(shards: DiscoveryShardResult[], options: Normalize
     },
     discovery: {
       agentType:
-        options.strategy === "go-explore"
+        options.strategy === "rl-go-explore"
+          ? "rl-go-explore-hybrid"
+          : options.strategy === "go-explore"
           ? "go-explore-checkpoint"
           : options.strategy === "full-run-evolution"
             ? "full-run-evolution"
@@ -1138,7 +1374,7 @@ function mergeDiscoveryShards(shards: DiscoveryShardResult[], options: Normalize
 function createDiscoveryRunResult(options: {
   inputs: LoadedInputs;
   options: DiscoveryShardOptions;
-  agentType: "coverage-guided-explorer" | "go-explore-checkpoint" | "full-run-evolution";
+  agentType: "coverage-guided-explorer" | "go-explore-checkpoint" | "full-run-evolution" | "rl-go-explore-hybrid";
   globalCells: Set<string>;
   globalCoverageGoals: Set<string>;
   allEpisodes: DiscoveryEpisode[];
@@ -1299,14 +1535,16 @@ async function mergeEpisodeLogFiles(shardPaths: string[], finalEpisodeLogPath: s
 }
 
 export function createOverlaySamples(samples: FrameSample[], findings: Finding[] = []): OverlaySample[] {
+  const firstDeathIndex = samples.findIndex((sample) => sample.dying);
+  const liveSamples = firstDeathIndex >= 0 ? samples.slice(0, firstDeathIndex + 1) : samples;
   const findingWindows = findings.map((finding) => ({
     start: finding.frameStart,
     end: finding.frameEnd
   }));
 
-  return samples
+  return liveSamples
     .filter((sample, index) => {
-      if (index === 0 || index === samples.length - 1 || sample.frame % 4 === 0 || sample.dying) {
+      if (index === 0 || index === liveSamples.length - 1 || sample.frame % 4 === 0 || sample.dying) {
         return true;
       }
 
@@ -1436,6 +1674,327 @@ export function macroTraceFromReplayInputs(ranges: ReproInputRange[]): MacroStep
     }));
 
   return mergeAdjacentMacroSteps(trace);
+}
+
+function createRlDiscoveryEpisode(options: {
+  id: string;
+  globalEpisode: number;
+  phase: "rl-explore" | "go-explore-bug";
+  mutation: string;
+  parentId?: string;
+  execution: ReturnType<typeof executeEpisode>;
+  globalCells: Set<string>;
+  globalCoverageGoals: Set<string>;
+  focus: DiscoveryFocus;
+  bugTarget: BugTarget;
+  rlEpsilon?: number;
+  rlStateCount?: number;
+  rlUpdateCount?: number;
+}): DiscoveryEpisode {
+  const session = sessionFromExecution("coverage-explorer", options.execution);
+  const actualTrace = macroTraceFromReplayInputs(options.execution.replayInputs);
+  const obstacleWindow = detectForwardObstacleWindow(options.execution.samples, options.execution.replayInputs);
+  const overlaySamples = createOverlaySamples(options.execution.samples, session.findings);
+  const cells = new Set(options.execution.samples.map(createArchiveCell));
+  const newCells = countNewCells(cells, options.globalCells);
+  const coverageGoalsHit = [...collectCoverageGoals(options.execution.samples)].sort();
+  const coverageScore = scoreCoverageGoals(coverageGoalsHit, options.globalCoverageGoals);
+  const bugScore = scoreFindings(session.findings);
+  const milestoneFrames = computeMilestoneFrames(options.execution.samples);
+  const speedScore = scoreSpeedMilestones(milestoneFrames, session.metrics.deaths);
+  const routeScore = scoreRouteEfficiency(options.execution.samples, session.metrics.deaths);
+  const roomStats = computeRoomStats(options.execution.samples);
+  const roomScore = scoreRooms(roomStats);
+  const gameScoreStats = computeGameScoreStats(options.execution.samples);
+  const gameScore = scoreGameScoreDelta(gameScoreStats.delta);
+  const progressScore = scoreDiscoveryProgress(session, cells, newCells, {
+    coverageScore,
+    routeScore,
+    speedScore,
+    roomScore,
+    gameScore
+  });
+  const score = scoreDiscoveryEpisode(session, cells, newCells, bugScore, {
+    coverageScore,
+    routeScore,
+    speedScore,
+    roomScore,
+    gameScore
+  });
+  const targetReached = session.metrics.maxProgress >= VINE_WARP_TARGET_PROGRESS;
+  session.agent = {
+    type: "rl-go-explore-hybrid",
+    episode: options.globalEpisode,
+    episodeId: options.id,
+    parentId: options.parentId,
+    startFrame: 0,
+    prefixFrames: 0,
+    suffixFrames: options.execution.samples.length,
+    score,
+    newCells,
+    cellsVisited: options.execution.samples.length,
+    uniqueCells: cells.size,
+    bugScore,
+    progressScore,
+    coverageScore,
+    coverageGoalsHit,
+    routeScore,
+    speedScore,
+    roomScore,
+    gameScore,
+    gameScoreDelta: gameScoreStats.delta,
+    milestoneFrames,
+    roomTransitions: roomStats.transitions,
+    roomsReached: roomStats.rooms,
+    progressDelta: session.metrics.maxProgress,
+    targetReached,
+    obstacleFrame: obstacleWindow?.mutationFrame,
+    obstacleProgress: obstacleWindow?.progress,
+    obstacleDurationFrames: obstacleWindow?.durationFrames,
+    obstacleReason: obstacleWindow?.reason,
+    phase: options.phase,
+    rlEpsilon: options.rlEpsilon,
+    rlStateCount: options.rlStateCount,
+    rlUpdateCount: options.rlUpdateCount,
+    focus: options.focus,
+    bugTarget: options.bugTarget,
+    mutation: options.mutation
+  };
+
+  return {
+    id: options.id,
+    parentId: options.parentId,
+    trace: actualTrace,
+    session,
+    cells,
+    newCells,
+    bugScore,
+    progressScore,
+    coverageScore,
+    coverageGoalsHit,
+    routeScore,
+    speedScore,
+    roomScore,
+    gameScore,
+    gameScoreDelta: gameScoreStats.delta,
+    milestoneFrames,
+    roomTransitions: roomStats.transitions,
+    roomsReached: roomStats.rooms,
+    score,
+    progressDelta: session.metrics.maxProgress,
+    targetReached,
+    obstacleWindow,
+    mutation: options.mutation,
+    overlaySamples
+  };
+}
+
+interface RlActionOption {
+  action: MacroActionName;
+  frames: number;
+  label: string;
+  weight: number;
+}
+
+const RL_ACTIONS: RlActionOption[] = [
+  { action: "right-b", frames: 18, label: "run-short", weight: 5 },
+  { action: "right-b", frames: 42, label: "run-long", weight: 4 },
+  { action: "jump-right", frames: 14, label: "hop-early", weight: 5 },
+  { action: "jump-right", frames: 28, label: "jump-full", weight: 5 },
+  { action: "jump-right", frames: 40, label: "jump-hold", weight: 3 },
+  { action: "down-right", frames: 18, label: "duck-forward", weight: 1.4 },
+  { action: "pipe-hold", frames: 34, label: "pipe-hold", weight: 1.4 },
+  { action: "climb-right", frames: 24, label: "climb-right", weight: 1.1 },
+  { action: "oscillate", frames: 12, label: "micro-oscillate", weight: 0.2 },
+  { action: "idle", frames: 8, label: "wait-tiny", weight: 0.12 }
+];
+
+class TabularRlPolicy {
+  private readonly values = new Map<string, number[]>();
+  updateCount = 0;
+
+  get stateCount(): number {
+    return this.values.size;
+  }
+
+  actionValues(state: string): number[] {
+    let values = this.values.get(state);
+    if (!values) {
+      values = Array.from({ length: RL_ACTIONS.length }, () => 0);
+      this.values.set(state, values);
+    }
+    return values;
+  }
+
+  update(state: string, actionIndex: number, reward: number, nextState: string): void {
+    const values = this.actionValues(state);
+    const nextValues = this.actionValues(nextState);
+    const alpha = 0.22;
+    const gamma = 0.9;
+    const target = reward + gamma * Math.max(...nextValues);
+    values[actionIndex] += alpha * (target - values[actionIndex]);
+    this.updateCount += 1;
+  }
+}
+
+class RlExplorationController {
+  private current:
+    | {
+        state: string;
+        actionIndex: number;
+        framesRemaining: number;
+        startProgress: number;
+        startScore: number;
+        startRoomId: string;
+      }
+    | undefined;
+  private previousProgress = 0;
+  private noProgressFrames = 0;
+
+  constructor(
+    private readonly policy: TabularRlPolicy,
+    private readonly random: () => number,
+    private readonly epsilon: number,
+    private readonly focus: DiscoveryFocus
+  ) {}
+
+  buttons(frame: number, snapshot: SmbRamSnapshot, durationFrames: number): ButtonName[] {
+    this.updateProgressWindow(snapshot);
+    if (snapshot.dying) {
+      this.closeAction(snapshot, -220);
+      return [];
+    }
+
+    if (snapshot.onVine || snapshot.vineVisible) {
+      this.closeAction(snapshot, 8);
+      return ["UP", "RIGHT"];
+    }
+
+    if (!this.current || this.current.framesRemaining <= 0) {
+      this.closeAction(snapshot, 0);
+      const state = this.stateKey(snapshot);
+      const actionIndex = this.chooseActionIndex(snapshot, state, frame, durationFrames);
+      const option = RL_ACTIONS[actionIndex]!;
+      this.current = {
+        state,
+        actionIndex,
+        framesRemaining: this.actionFrames(option),
+        startProgress: snapshot.progress,
+        startScore: snapshot.score,
+        startRoomId: snapshot.roomId
+      };
+    }
+
+    this.current.framesRemaining -= 1;
+    return buttonsForMacro(RL_ACTIONS[this.current.actionIndex]!.action, frame);
+  }
+
+  finish(snapshot: SmbRamSnapshot | undefined): void {
+    if (snapshot) {
+      this.closeAction(snapshot, snapshot.dying ? -220 : 0);
+    }
+  }
+
+  private chooseActionIndex(snapshot: SmbRamSnapshot, state: string, frame: number, durationFrames: number): number {
+    const allowRisky = this.focus === "coverage" || this.focus === "bugs" || snapshot.progress >= VINE_WARP_TARGET_PROGRESS || frame > durationFrames * 0.35;
+    if (this.random() < this.epsilon) {
+      return this.weightedActionIndex(allowRisky);
+    }
+
+    const values = this.policy.actionValues(state);
+    let bestIndex = 0;
+    let bestValue = Number.NEGATIVE_INFINITY;
+    for (const [index, value] of values.entries()) {
+      const option = RL_ACTIONS[index]!;
+      if (!allowRisky && (option.action === "idle" || option.action === "oscillate")) {
+        continue;
+      }
+      const tieBreaker = this.random() * 0.05;
+      const prior = option.action === "jump-right" ? 0.18 : option.action === "right-b" ? 0.14 : 0;
+      const adjusted = value + prior + tieBreaker;
+      if (adjusted > bestValue) {
+        bestValue = adjusted;
+        bestIndex = index;
+      }
+    }
+    return bestIndex;
+  }
+
+  private weightedActionIndex(allowRisky: boolean): number {
+    const weights = RL_ACTIONS.map((option) => {
+      if (!allowRisky && (option.action === "idle" || option.action === "oscillate")) {
+        return 0;
+      }
+      return option.weight;
+    });
+    const total = weights.reduce((sum, weight) => sum + weight, 0);
+    let pick = this.random() * total;
+    for (const [index, weight] of weights.entries()) {
+      pick -= weight;
+      if (pick <= 0) {
+        return index;
+      }
+    }
+    return 0;
+  }
+
+  private actionFrames(option: RlActionOption): number {
+    return clampInteger(option.frames + randomInteger(this.random, -6, 10), RL_ACTION_MIN_FRAMES, RL_ACTION_MAX_FRAMES);
+  }
+
+  private closeAction(snapshot: SmbRamSnapshot, bonus: number): void {
+    if (!this.current) {
+      return;
+    }
+
+    const progressDelta = snapshot.progress - this.current.startProgress;
+    const scoreDelta = Math.max(0, snapshot.score - this.current.startScore);
+    const roomBonus = snapshot.roomId !== this.current.startRoomId ? 36 : 0;
+    const targetBonus = snapshot.progress >= VINE_WARP_TARGET_PROGRESS ? 42 : 0;
+    const backwardPenalty = progressDelta < 0 ? Math.abs(progressDelta) * 2.4 : 0;
+    const stallPenalty = progressDelta <= 1 && this.noProgressFrames > 24 ? 18 : 0;
+    const reward =
+      progressDelta * 0.95 +
+      scoreDelta / 28 +
+      roomBonus +
+      targetBonus +
+      (progressDelta > 8 ? 8 : 0) +
+      bonus -
+      backwardPenalty -
+      stallPenalty;
+    this.policy.update(this.current.state, this.current.actionIndex, reward, this.stateKey(snapshot));
+    this.current = undefined;
+  }
+
+  private updateProgressWindow(snapshot: SmbRamSnapshot): void {
+    if (snapshot.progress > this.previousProgress + 1) {
+      this.noProgressFrames = 0;
+    } else if (snapshot.levelLoading === 0 && snapshot.gameMode === 1) {
+      this.noProgressFrames += 1;
+    }
+    this.previousProgress = Math.max(this.previousProgress, snapshot.progress);
+  }
+
+  private stateKey(snapshot: SmbRamSnapshot): string {
+    return [
+      `w${snapshot.rawWorld}`,
+      `l${snapshot.rawLevel}`,
+      `p${Math.floor(snapshot.progress / 96)}`,
+      `x${Math.floor(snapshot.xOnScreen / 32)}`,
+      `y${Math.floor(snapshot.yOnScreen / 48)}`,
+      snapshot.onVine || snapshot.vineVisible ? "vine" : "no-vine",
+      snapshot.pipeInteraction || snapshot.enteringPipe ? "pipe" : "no-pipe",
+      snapshot.warpZoneVisible ? "warp" : "no-warp",
+      this.noProgressFrames > 30 ? "stuck" : "moving"
+    ].join("|");
+  }
+}
+
+function rlExplorationRate(episode: number, totalEpisodes: number, focus: DiscoveryFocus): number {
+  const start = focus === "coverage" ? 0.62 : focus === "bugs" ? 0.55 : 0.48;
+  const end = focus === "progress" ? 0.12 : 0.18;
+  const t = totalEpisodes <= 1 ? 1 : (episode - 1) / (totalEpisodes - 1);
+  return Number((start + (end - start) * t).toFixed(3));
 }
 
 export function mutateMacroTrace(
@@ -1924,6 +2483,131 @@ export class WallClipProbeController {
   }
 }
 
+export class WallClipTrickController {
+  private readonly fallback: ProgressController;
+  private trickFrames = 0;
+  private armed = false;
+  private recoveryFrames = 0;
+  private recoveredFromStall = false;
+
+  constructor(
+    private readonly random: () => number,
+    fallbackConfig: ProgressControllerConfig
+  ) {
+    this.fallback = new ProgressController(progressBiasedConfig(fallbackConfig));
+  }
+
+  buttons(frame: number, snapshot: SmbRamSnapshot, durationFrames: number): ButtonName[] {
+    if (snapshot.dying || snapshot.playerStateName.includes("transforming")) {
+      this.trickFrames = 0;
+      this.armed = false;
+      this.recoveryFrames = 0;
+      this.recoveredFromStall = false;
+      return [];
+    }
+
+    if (snapshot.playerStateName === "left-edge" || snapshot.playerStateName === "entering-area" || snapshot.levelLoading > 0) {
+      return ["B", "RIGHT"];
+    }
+
+    if (snapshot.onVine || snapshot.vineVisible) {
+      this.armed = true;
+      return this.clipSequence(snapshot);
+    }
+
+    if (snapshot.enteringPipe || snapshot.changeAreaTimer > 0) {
+      return ["DOWN", "RIGHT"];
+    }
+
+    if (!this.armed && this.shouldArmClip(snapshot)) {
+      this.armed = true;
+      this.trickFrames = 0;
+      this.recoveryFrames = 0;
+      this.recoveredFromStall = false;
+    }
+
+    if (this.armed) {
+      return this.clipSequence(snapshot);
+    }
+
+    return this.approachButtons(frame, snapshot, durationFrames);
+  }
+
+  private shouldArmClip(snapshot: SmbRamSnapshot): boolean {
+    const geometryPressure =
+      snapshot.pipeInteraction ||
+      snapshot.pipeTileCount > 0 ||
+      snapshot.hiddenBlockTileCount > 0 ||
+      snapshot.scrollLock > 0 ||
+      snapshot.playerCollisionBits !== 0xff ||
+      snapshot.playerHitDetectFlag !== 0;
+    const wallClipRegion =
+      snapshot.progress >= 500 ||
+      (isWorld42SubArea(snapshot) && snapshot.progress >= 430) ||
+      snapshot.vineVisible ||
+      snapshot.warpZoneVisible;
+
+    return wallClipRegion && geometryPressure;
+  }
+
+  private approachButtons(frame: number, snapshot: SmbRamSnapshot, durationFrames: number): ButtonName[] {
+    if (snapshot.progress < 150) {
+      return ["B", "RIGHT"];
+    }
+
+    if (this.needsUpperRouteJump(snapshot)) {
+      return ["A", "B", "RIGHT"];
+    }
+
+    if (snapshot.pipeInteraction || snapshot.pipeTileCount > 0) {
+      return ["B", "RIGHT"];
+    }
+
+    return this.fallback.buttons(frame, snapshot, durationFrames);
+  }
+
+  private needsUpperRouteJump(snapshot: SmbRamSnapshot): boolean {
+    const progress = snapshot.progress;
+    return (
+      (progress >= 160 && progress <= 390) ||
+      (progress >= 430 && progress <= 620) ||
+      (progress >= 780 && progress <= 980) ||
+      (isWorld42SubArea(snapshot) && progress >= 240 && progress < VINE_WARP_TARGET_PROGRESS)
+    );
+  }
+
+  private clipSequence(snapshot: SmbRamSnapshot): ButtonName[] {
+    this.trickFrames += 1;
+
+    if (snapshot.horizontalSpeedAbs > 1 || !snapshot.pipeInteraction) {
+      this.recoveredFromStall = false;
+    }
+
+    if (snapshot.horizontalSpeedAbs <= 1 && snapshot.pipeInteraction && !this.recoveredFromStall && this.recoveryFrames <= 0) {
+      this.recoveryFrames = 10;
+      this.recoveredFromStall = true;
+    }
+
+    if (this.recoveryFrames > 0) {
+      this.recoveryFrames -= 1;
+      return this.recoveryFrames > 5 ? ["A", "B", "LEFT"] : ["A", "B", "RIGHT"];
+    }
+
+    const phase = (this.trickFrames - 1) % 96;
+    if (phase < 18) return ["B", "RIGHT"];
+    if (phase < 22) return ["RIGHT"];
+    if (phase < 26) return ["B"];
+    if (phase < 30) return ["B", "LEFT"];
+    if (phase < 38) return ["B", "DOWN", "RIGHT"];
+    if (phase < 56) return ["A", "B", "RIGHT"];
+    if (phase < 62) return ["RIGHT"];
+    if (phase < 70) return ["A", "RIGHT"];
+    if (phase < 84) return ["A", "B", "RIGHT"];
+    if (phase < 90) return ["B", "DOWN", "RIGHT"];
+    return this.random() < 0.5 ? ["B", "RIGHT"] : ["RIGHT"];
+  }
+}
+
 export class CoverageGoalController {
   private readonly fallback: ProgressController;
   private readonly missingGoals: Set<string>;
@@ -2038,6 +2722,9 @@ function createGoExploreController(
   }
   if (controlMode === "wall-clip-probe") {
     return new WallClipProbeController(random, controllerConfig);
+  }
+  if (controlMode === "wall-clip-trick") {
+    return new WallClipTrickController(random, controllerConfig);
   }
 
   return new ProgressController(controllerConfig);
@@ -2199,17 +2886,24 @@ export function scoreDiscoveryEpisode(
   bugScore = scoreFindings(session.findings),
   context: DiscoveryScoreContext = {}
 ): number {
-  return Number(
-    (
-      bugScore +
-      (context.coverageScore ?? 0) +
-      (context.routeScore ?? 0) +
-      (context.speedScore ?? 0) +
-      (context.roomScore ?? 0) +
-      (context.gameScore ?? 0) +
-      scoreDiscoveryProgress(session, cells, newCells, context)
-    ).toFixed(2)
-  );
+  const componentScores = {
+    coverageScore: context.coverageScore ?? 0,
+    routeScore: context.routeScore ?? 0,
+    speedScore: context.speedScore ?? 0,
+    roomScore: context.roomScore ?? 0,
+    gameScore: context.gameScore ?? 0,
+    progressScore: scoreDiscoveryProgress(session, cells, newCells, context)
+  };
+  const rawScore =
+    bugScore +
+    componentScores.coverageScore +
+    componentScores.routeScore +
+    componentScores.speedScore +
+    componentScores.roomScore +
+    componentScores.gameScore +
+    componentScores.progressScore;
+
+  return Number(adjustDiscoveryScoreForDeath(rawScore, session, bugScore, componentScores).toFixed(2));
 }
 
 export function scoreDiscoveryProgress(
@@ -2220,9 +2914,13 @@ export function scoreDiscoveryProgress(
 ): number {
   const progressDelta = Math.max(0, session.metrics.maxProgress - (context.startProgress ?? 0));
   const reachedTarget = context.targetReached ?? session.metrics.maxProgress >= VINE_WARP_TARGET_PROGRESS;
+  const endedDead = session.metrics.deaths > 0;
+  const meaningfulBug = hasMeaningfulBugEvidence(session.findings, scoreFindings(session.findings));
   const diedBeforeTarget = !reachedTarget && session.metrics.deaths > 0;
-  const routeValueMultiplier = diedBeforeTarget ? 0.32 : 1;
-  const earlyDeathPenalty = session.metrics.maxProgress < 320 ? session.metrics.deaths * 95 : session.metrics.deaths * 36;
+  const routeValueMultiplier = endedDead ? (meaningfulBug ? 0.55 : 0.28) : diedBeforeTarget ? 0.32 : 1;
+  const earlyDeathPenalty = endedDead
+    ? session.metrics.deaths * (session.metrics.maxProgress < 320 ? 360 : meaningfulBug ? 140 : 260)
+    : 0;
   const preTargetDeathPenalty = diedBeforeTarget ? 220 : 0;
   const transitionLoopPenalty = session.findings.some((finding) => finding.type === "transition-loop") && newCells === 0 ? 45 : 0;
   const shallowLoopPenalty = session.metrics.maxProgress < 240 ? 35 : 0;
@@ -2234,13 +2932,69 @@ export function scoreDiscoveryProgress(
       session.coverage.length * 4 +
       (session.metrics.maxProgress / 1.9) * routeValueMultiplier +
       (progressDelta / 1.05) * routeValueMultiplier +
-      (reachedTarget ? 260 : 0) +
-      (session.metrics.deaths === 0 ? 120 : 0) -
+      (reachedTarget ? (endedDead ? 60 : 260) : 0) +
+      (endedDead ? -180 : 120) -
       preTargetDeathPenalty -
       earlyDeathPenalty -
       transitionLoopPenalty -
       shallowLoopPenalty
     ).toFixed(2)
+  );
+}
+
+function adjustDiscoveryScoreForDeath(
+  rawScore: number,
+  session: Pick<SessionResult, "metrics" | "coverage" | "findings">,
+  bugScore: number,
+  components: {
+    coverageScore: number;
+    routeScore: number;
+    speedScore: number;
+    roomScore: number;
+    gameScore: number;
+    progressScore: number;
+  }
+): number {
+  if (session.metrics.deaths <= 0) {
+    return rawScore;
+  }
+
+  const meaningfulBug = hasMeaningfulBugEvidence(session.findings, bugScore);
+  const nonBugScore = Math.max(0, rawScore - bugScore);
+  if (meaningfulBug) {
+    return Math.max(
+      0,
+      Math.min(
+        bugScore + nonBugScore * 0.58 - session.metrics.deaths * 140,
+        session.metrics.maxProgress * 1.1 + bugScore * 4 + Math.min(400, components.coverageScore) + Math.min(300, components.roomScore)
+      )
+    );
+  }
+
+  return Math.max(
+    0,
+    Math.min(
+      nonBugScore * 0.22 - session.metrics.deaths * 360,
+      session.metrics.maxProgress * 0.55 +
+        Math.min(160, components.coverageScore) +
+        Math.min(60, components.speedScore) +
+        Math.min(80, components.roomScore) +
+        Math.min(80, components.gameScore)
+    )
+  );
+}
+
+function hasMeaningfulBugEvidence(findings: Finding[], bugScore: number): boolean {
+  if (bugScore >= 100) {
+    return true;
+  }
+
+  return findings.some(
+    (finding) =>
+      finding.severity === "high" ||
+      finding.type === "emulator-error" ||
+      finding.type === "impossible-transition" ||
+      finding.type === "wrong-warp-candidate"
   );
 }
 
@@ -2610,6 +3364,19 @@ function chooseGoExploreControlMode(
   const warpScore = scoreBugHotspot(parent, "warp-zone");
   const wallScore = scoreBugHotspot(parent, "wall-clip");
   const canProbe = focus !== "progress" && (warpScore > 0 || wallScore > 0);
+  if (focus !== "progress" && bugTarget === "wall-clip") {
+    if (wallScore > 0) {
+      const trickRate = focus === "bugs" ? 0.86 : bestProgress >= BUG_PROBE_FRONTIER_PROGRESS ? 0.62 : 0.38;
+      if (random() < trickRate) {
+        return "wall-clip-trick";
+      }
+    }
+
+    if (focus === "bugs" && random() < 0.36) {
+      return "wall-clip-trick";
+    }
+  }
+
   if (canProbe) {
     const probeRate = focus === "bugs" ? 0.78 : bestProgress >= BUG_PROBE_FRONTIER_PROGRESS ? 0.48 : 0.22;
     if (random() < probeRate) {
@@ -2617,7 +3384,10 @@ function chooseGoExploreControlMode(
       if (bugTarget === "wall-clip") return "wall-clip-probe";
       if (warpScore === 0) return "wall-clip-probe";
       if (wallScore === 0) return "warp-zone-probe";
-      return random() < warpScore / (warpScore + wallScore) ? "warp-zone-probe" : "wall-clip-probe";
+      if (random() < warpScore / (warpScore + wallScore)) {
+        return "warp-zone-probe";
+      }
+      return random() < 0.55 ? "wall-clip-trick" : "wall-clip-probe";
     }
   }
 
@@ -2643,6 +3413,9 @@ function chooseGoExploreControlMode(
 }
 
 function formatMutationLabel(mutation: string, controlMode: GoExploreControlMode): string {
+  if (controlMode === "wall-clip-trick") {
+    return `${mutation}+4-2-wall-clip-trick`;
+  }
   if (controlMode === "warp-zone-probe" || controlMode === "wall-clip-probe") {
     return `${mutation}+hotspot-probe`;
   }
@@ -2889,9 +3662,13 @@ function selectSavedDiscoveryItems<T>(items: T[], sessionOf: (item: T) => Sessio
   const progressItems = [...items].sort((a, b) => compareProgressSessions(sessionOf(a), sessionOf(b)));
   const progressQuota = Math.max(1, Math.ceil(top / 2));
   const primaryProgressItems = progressItems.slice(0, progressQuota);
+  const bugPhaseItems = [...items]
+    .filter((item) => sessionOf(item).agent?.phase === "go-explore-bug")
+    .sort((a, b) => compareBugSessions(sessionOf(a), sessionOf(b)))
+    .slice(0, Math.max(1, Math.floor(top / 4)));
   const balancedItems = [...items].sort((a, b) => compareBalancedSessions(sessionOf(a), sessionOf(b)));
 
-  return fillUniqueItems(primaryProgressItems, bugItems, top, coverageItems, progressItems, balancedItems).sort((a, b) =>
+  return fillUniqueItems(primaryProgressItems, bugPhaseItems, top, bugItems, coverageItems, progressItems, balancedItems).sort((a, b) =>
     compareBalancedSessions(sessionOf(a), sessionOf(b))
   );
 }
@@ -3733,8 +4510,8 @@ function normalizeDiscoveryOptions(options: DiscoverOptions): NormalizedDiscover
 }
 
 function normalizeStrategy(value: string): DiscoveryStrategy {
-  if (value !== "full-run-evolution" && value !== "go-explore" && value !== "trace-mutation") {
-    throw new Error(`strategy must be one of: full-run-evolution, go-explore, trace-mutation. Received ${value}.`);
+  if (value !== "rl-go-explore" && value !== "full-run-evolution" && value !== "go-explore" && value !== "trace-mutation") {
+    throw new Error(`strategy must be one of: rl-go-explore, full-run-evolution, go-explore, trace-mutation. Received ${value}.`);
   }
 
   return value;

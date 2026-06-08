@@ -43,8 +43,8 @@ describe("optional SMB integration", () => {
 
     expect(result.discovery).toEqual(
       expect.objectContaining({
-        agentType: "full-run-evolution",
-        strategy: "full-run-evolution",
+        agentType: "rl-go-explore-hybrid",
+        strategy: "rl-go-explore",
         episodes: 3,
         top: 2
       })
@@ -54,7 +54,7 @@ describe("optional SMB integration", () => {
       expect.objectContaining({
         persona: "coverage-explorer",
         agent: expect.objectContaining({
-          type: "full-run-evolution",
+          type: "rl-go-explore-hybrid",
           episode: expect.any(Number),
           score: expect.any(Number)
         }),
@@ -76,8 +76,8 @@ describe("optional SMB integration", () => {
 
     expect(result.discovery).toEqual(
       expect.objectContaining({
-        agentType: "full-run-evolution",
-        strategy: "full-run-evolution",
+        agentType: "rl-go-explore-hybrid",
+        strategy: "rl-go-explore",
         episodes: 4,
         workers: 2
       })

@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-describe("playtestiq-smb CLI", () => {
+describe("checkpoint-smb CLI", () => {
   it("rejects missing ROM and state inputs with a clear error", () => {
     const result = spawnSync(
       process.execPath,
@@ -40,6 +40,31 @@ describe("playtestiq-smb CLI", () => {
         "missing.state.json",
         "--run",
         "missing.playtest.json"
+      ],
+      {
+        cwd: process.cwd(),
+        encoding: "utf8"
+      }
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("ROM file does not exist");
+  });
+
+  it("rejects missing wall-clip setup inputs with a clear error", () => {
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        join(process.cwd(), "src", "cli.ts"),
+        "wallclip-setup",
+        "--rom",
+        "missing.nes",
+        "--state",
+        "missing.state.json",
+        "--out",
+        "missing.wallclip.json"
       ],
       {
         cwd: process.cwd(),
@@ -143,6 +168,32 @@ describe("playtestiq-smb CLI", () => {
         "missing.state.json",
         "--strategy",
         "full-run-evolution"
+      ],
+      {
+        cwd: process.cwd(),
+        encoding: "utf8"
+      }
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("ROM file does not exist");
+    expect(result.stderr).not.toContain("Invalid strategy");
+  });
+
+  it("accepts RL Go-Explore discovery strategy before rejecting missing files", () => {
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        join(process.cwd(), "src", "cli.ts"),
+        "discover",
+        "--rom",
+        "missing.nes",
+        "--state",
+        "missing.state.json",
+        "--strategy",
+        "rl-go-explore"
       ],
       {
         cwd: process.cwd(),

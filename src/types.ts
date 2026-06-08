@@ -142,7 +142,7 @@ export interface SessionResult {
 }
 
 export interface DiscoveryAgentMetadata {
-  type: "coverage-guided-explorer" | "go-explore-checkpoint" | "full-run-evolution";
+  type: "coverage-guided-explorer" | "go-explore-checkpoint" | "full-run-evolution" | "rl-go-explore-hybrid";
   episode: number;
   episodeId: string;
   parentId?: string;
@@ -172,12 +172,16 @@ export interface DiscoveryAgentMetadata {
   obstacleProgress?: number;
   obstacleDurationFrames?: number;
   obstacleReason?: string;
+  phase?: "rl-explore" | "go-explore-bug";
+  rlEpsilon?: number;
+  rlStateCount?: number;
+  rlUpdateCount?: number;
   focus?: DiscoveryFocus;
   bugTarget?: BugTarget;
   mutation: string;
 }
 
-export type DiscoveryStrategy = "full-run-evolution" | "go-explore" | "trace-mutation";
+export type DiscoveryStrategy = "rl-go-explore" | "full-run-evolution" | "go-explore" | "trace-mutation";
 export type DiscoveryFocus = "balanced" | "bugs" | "progress" | "coverage";
 export type BugTarget = "all" | "warp-zone" | "wall-clip";
 
@@ -191,7 +195,7 @@ export interface CoverageGoalSummary {
 }
 
 export interface DiscoverySummary {
-  agentType: "coverage-guided-explorer" | "go-explore-checkpoint" | "full-run-evolution";
+  agentType: "coverage-guided-explorer" | "go-explore-checkpoint" | "full-run-evolution" | "rl-go-explore-hybrid";
   strategy: DiscoveryStrategy;
   focus: DiscoveryFocus;
   bugTarget: BugTarget;

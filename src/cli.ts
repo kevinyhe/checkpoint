@@ -3,6 +3,7 @@ import { Command, InvalidArgumentError } from "commander";
 import { runDiscovery } from "./discovery.js";
 import { writeJsonFile } from "./files.js";
 import { runPlaytest, validateState } from "./runner.js";
+import { createWallClipSetupRun } from "./wallclip-repro.js";
 import {
   SCRIPTED_PERSONAS,
   type BugTarget,
@@ -16,8 +17,8 @@ import { startRunViewerServer } from "./viewer-server.js";
 const program = new Command();
 
 program
-  .name("playtestiq-smb")
-  .description("PlaytestIQ SMB 4-2 scripted AI playtesting CLI demo.")
+  .name("checkpoint-smb")
+  .description("checkpoint SMB 4-2 scripted AI playtesting CLI demo.")
   .version("0.1.0");
 
 program
@@ -70,7 +71,7 @@ program
   .option("--seed <number>", "Deterministic discovery seed.", parseInteger, 1)
   .option("--top <count>", "Number of top episodes to keep in the output JSON.", parsePositiveInteger, 10)
   .option("--workers <count>", "Number of parallel discovery worker shards.", parsePositiveInteger, 1)
-  .option("--strategy <strategy>", "full-run-evolution, go-explore, or trace-mutation.", parseDiscoveryStrategy, "full-run-evolution")
+  .option("--strategy <strategy>", "rl-go-explore, full-run-evolution, go-explore, or trace-mutation.", parseDiscoveryStrategy, "rl-go-explore")
   .option("--focus <focus>", "balanced, bugs, progress, or coverage.", parseDiscoveryFocus, "balanced")
   .option("--bug-target <target>", "all, warp-zone, or wall-clip.", parseBugTarget, "all")
   .option("--checkpoint-limit <count>", "Requested in-memory Go-Explore checkpoints per worker; capped for heap safety.", parsePositiveInteger, 160)
@@ -115,7 +116,7 @@ program
   .description("Start a local browser viewer that replays a run JSON inside JSNES.")
   .requiredOption("--rom <file.nes>", "Path to the same legally provided SMB ROM used for the run.")
   .requiredOption("--state <state.json>", "Path to the same JSNES 4-2 save state used for the run.")
-  .requiredOption("--run <result.json>", "Path to a PlaytestIQ run JSON.")
+  .requiredOption("--run <result.json>", "Path to a checkpoint run JSON.")
   .option("--episodes <file.jsonl>", "Optional all-episode JSONL sidecar for synced overlay mode.")
   .option("--port <number>", "Preferred local viewer port.", parsePositiveInteger, 4174)
   .action(async (options: ViewCommandOptions) => {
@@ -132,6 +133,32 @@ program
 
     await waitForShutdown();
     await new Promise<void>((resolve) => viewer.server.close(() => resolve()));
+  });
+
+program
+  .command("wallclip-setup")
+  .description("Generate a deterministic replayable 4-2 wall-clip setup run for viewer/repro work.")
+  .requiredOption("--rom <file.nes>", "Path to a legally provided Super Mario Bros. NES ROM.")
+  .requiredOption("--state <state.json>", "Path to a JSNES toJSON() save state positioned at World 4-2.")
+  .requiredOption("--out <result.json>", "Write the wall-clip setup run JSON to this path.")
+  .option("--duration <seconds>", "Run budget for the setup attempt in seconds.", parsePositiveInteger, 45)
+  .option("--seed <number>", "Deterministic setup seed.", parseInteger, 1)
+  .option("--source-run <result.json>", "Extract the best wall-clip-risk episode from an existing discovery run.")
+  .option("--episode-log <file.jsonl>", "Optional JSONL sidecar path for viewer overlay samples.")
+  .action(async (options: WallClipSetupCommandOptions) => {
+    const result = await createWallClipSetupRun({
+      romPath: options.rom,
+      statePath: options.state,
+      durationSeconds: options.duration,
+      seed: options.seed,
+      outPath: options.out,
+      episodeLogPath: options.episodeLog,
+      sourceRunPath: options.sourceRun
+    });
+
+    await writeJsonFile(options.out, result.run);
+    process.stdout.write(`Wall-clip setup run: ${options.out}\n`);
+    process.stdout.write(`Episode sidecar: ${result.episodeLogPath}\n`);
   });
 
 program.exitOverride();
@@ -190,6 +217,16 @@ interface ViewCommandOptions {
   port: number;
 }
 
+interface WallClipSetupCommandOptions {
+  rom: string;
+  state: string;
+  out: string;
+  duration: number;
+  seed: number;
+  sourceRun?: string;
+  episodeLog?: string;
+}
+
 function parsePersona(value: string): PersonaOption {
   const allowed = new Set<string>([...SCRIPTED_PERSONAS, "all"]);
   if (!allowed.has(value)) {
@@ -215,8 +252,8 @@ function parseInteger(value: string): number {
 }
 
 function parseDiscoveryStrategy(value: string): DiscoveryStrategy {
-  if (value !== "full-run-evolution" && value !== "go-explore" && value !== "trace-mutation") {
-    throw new InvalidArgumentError(`Invalid strategy "${value}". Expected full-run-evolution, go-explore, or trace-mutation.`);
+  if (value !== "rl-go-explore" && value !== "full-run-evolution" && value !== "go-explore" && value !== "trace-mutation") {
+    throw new InvalidArgumentError(`Invalid strategy "${value}". Expected rl-go-explore, full-run-evolution, go-explore, or trace-mutation.`);
   }
 
   return value;

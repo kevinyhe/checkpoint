@@ -38,7 +38,7 @@ describe("run viewer server", () => {
     const episodes = await fetch(`http://127.0.0.1:${viewer.port}/api/episodes`);
 
     expect(ok.status).toBe(200);
-    expect(await ok.text()).toContain("PlaytestIQ Run Viewer");
+    expect(await ok.text()).toContain("checkpoint Run Viewer");
     expect(episodes.status).toBe(200);
     expect(await episodes.text()).toContain("\"episode\":1");
     expect(traversal.status).toBe(404);
@@ -67,8 +67,26 @@ describe("run viewer server", () => {
     expect(html).toContain("ghostOverlay");
     expect(html).toContain("overlayLimitSelect");
     expect(html).toContain("trailLengthSelect");
+    expect(html).toContain("ghostDrawContext");
+    expect(html).toContain("redrawFrame");
+    expect(html).toContain("cameraOriginForSnapshot");
+    expect(html).toContain("screenLeftX");
+    expect(html).toContain("overlayLabelSelect");
+    expect(html).toContain("overlayLegend");
+    expect(html).toContain("AI Moment");
+    expect(html).toContain("aiObservationGrid");
+    expect(html).toContain("renderAiMoment");
+    expect(html).toContain("Enemy spotted");
+    expect(html).toContain("Score increased");
+    expect(html).toContain("enemySummary");
+    expect(html).toContain("eventPopupLayer");
+    expect(html).toContain("renderVisualPopups");
+    expect(html).toContain("popupNodeFor");
+    expect(html).toContain("event-popup");
     expect(html).toContain("drawGhostOverlay");
     expect(html).toContain("levelPage");
+    expect(html).toContain("rl states");
+    expect(html).toContain("phase ");
     expect(html).toContain("Grid replays");
     expect(html).toContain("gridViewer");
     expect(html).toContain("stepGridFrame");
@@ -78,12 +96,16 @@ describe("run viewer server", () => {
     expect(html).toContain("Game Score");
     expect(html).toContain("Rooms");
     expect(html).toContain("coverageGoal");
+    expect(html).toContain("displayProgress");
+    expect(html).toContain("displayScore");
+    expect(html).toContain("progressFromMilestones");
+    expect(html).toContain("visibleOverlaySamples");
     expect(html).toContain("/api/episodes");
   });
 });
 
 async function createViewerFixtures(options: { includeEpisodeLog?: boolean; episodeLogPath?: string } = {}) {
-  tempDir = await mkdtemp(join(tmpdir(), "playtestiq-viewer-"));
+  tempDir = await mkdtemp(join(tmpdir(), "checkpoint-viewer-"));
   const romPath = join(tempDir, "smb.nes");
   const statePath = join(tempDir, "world-4-2.state.json");
   const runPath = join(tempDir, "run.playtest.json");

@@ -9,6 +9,7 @@ export {
   CheckpointActionFuzzer,
   CoverageGoalController,
   WallClipProbeController,
+  WallClipTrickController,
   WarpZoneProbeController,
   computeGameScoreStats,
   computeMilestoneFrames,
