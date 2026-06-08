@@ -1,7 +1,6 @@
 # Checkpoint
 
-Checkpoint is a TypeScript CLI that runs scripted AI personas and a coverage-guided explorer against a headless NES emulator to find bugs in Super Mario Bros. World 4-2 before players do. It is the proof-of-concept demo for the [PlaytestIQ](https://github.com/kevinyhe/checkpoint) platform.
-
+Simulating human-like autonomous AI agents to test gameplay and catch bugs that frustrate players. Designed for indie and AAA developers without dedicated QA resources.
 ```
 checkpoint-smb <command> [options]
 ```
